@@ -1,4 +1,4 @@
-﻿$Source = @"
+$Source = @"
 using System;
 using System.Runtime;
 using System.Runtime.InteropServices;
@@ -1616,5 +1616,3 @@ Add-Type -TypeDefinition $Source -Language CSharp
 
 # Execute the unhooker
 [SharpUnhooker26H1]::Main()
-=======
->>>>>>> 3c479efe17479d82471b0fc670d9eb43f01e5740

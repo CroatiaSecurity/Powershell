@@ -5,7 +5,7 @@
 # Usage: Right-click > Run with PowerShell
 #        or from terminal: powershell -ExecutionPolicy Bypass -File OpenBookmarks.ps1
 
-$bookmarksFile = "$PSScriptRoot\Iso\sources\`$OEM`$\`$1\users\Default\Desktop\Extras\Bookmarks\bookmarks.html"
+$bookmarksFile = "$PSScriptRoot\bookmarks.html"
 
 if (-not (Test-Path $bookmarksFile)) {
     Write-Host "Bookmarks file not found: $bookmarksFile" -ForegroundColor Red

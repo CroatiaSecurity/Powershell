@@ -631,5 +631,3 @@ catch {
     Write-Host $errorMsg -ForegroundColor Red
     exit 1
 }
-=======
->>>>>>> 3c479efe17479d82471b0fc670d9eb43f01e5740

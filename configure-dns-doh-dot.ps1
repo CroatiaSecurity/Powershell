@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 # Configures DoH (Cloudflare primary, Google secondary) with DoT on both
 
 # Register DoH server templates in Windows
@@ -95,5 +95,3 @@ Write-Host "Primary:   Cloudflare 1.1.1.1 / 2606:4700:4700::1111"
 Write-Host "Secondary: Google     8.8.8.8 / 2001:4860:4860::8888"
 Write-Host "DoH: Enabled (Automatic) | DoT: Enabled"
 Write-Host "`nReopen Settings > Network > DNS to verify the dropdowns show 'On (automatic)'" -ForegroundColor Cyan
-=======
->>>>>>> 3c479efe17479d82471b0fc670d9eb43f01e5740
