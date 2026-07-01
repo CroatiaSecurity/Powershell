@@ -308,7 +308,7 @@ function Invoke-BrowserModuleGuard {
     }
 }
 
-# Continuous per-PID module monitor — runs in a background runspace at 500ms intervals
+# Continuous per-PID module monitor -- runs in a background runspace at 500ms intervals
 # Tracks which modules have already been checked per PID so it only acts on newly loaded ones
 function Start-ContinuousModuleMonitor {
     $rs = [runspacefactory]::CreateRunspace()
@@ -338,7 +338,7 @@ function Start-ContinuousModuleMonitor {
                     foreach ($mod in $modules) {
                         $mp = $mod.FileName
                         if ($KnownModules[$pid].Contains($mp)) { continue }
-                        # New module — check and eject if unsigned
+                        # New module -- check and eject if unsigned
                         $removed = [ModuleGuard]::UnloadUnsignedModules($pid)
                         foreach ($r in $removed) {
                             Write-BgLog "CONTINUOUS-MONITOR: Unloaded unsigned module $r from $($proc.ProcessName) PID $pid"
@@ -420,7 +420,7 @@ $ShellcodeIOCs = @(
     '-noprofile -noninteractive -enc'
 )
 
-# Suspicious API combinations (in binaries — these together indicate injection)
+# Suspicious API combinations (in binaries -- these together indicate injection)
 $InjectionAPIs = @(
     'VirtualAllocEx','WriteProcessMemory','CreateRemoteThread',
     'NtCreateThreadEx','RtlCreateUserThread',
@@ -494,7 +494,7 @@ function Invoke-DeepScan {
         $strUtf16 = [Text.Encoding]::Unicode.GetString($bytes).ToLower()
         $readable = $true
     } catch {
-        # Can't read = locked/encrypted/packed — treat as suspicious
+        # Can't read = locked/encrypted/packed -- treat as suspicious
         $score += 40
         $reasons.Add("unreadable-file")
     }
@@ -527,7 +527,7 @@ function Invoke-DeepScan {
                         $score += 20; $reasons.Add("packer:$sig"); break
                     }
                 }
-                # Injection API combos — score per API found, more = worse
+                # Injection API combos -- score per API found, more = worse
                 $apiHits = 0
                 foreach ($api in $InjectionAPIs) {
                     if ($combined.Contains($api.ToLower())) { $apiHits++ }
@@ -789,7 +789,7 @@ function Install-PasswordRotator {
     $workerPath = Join-Path $PwRotatorDir 'Worker.ps1'
     $PwRotatorWorkerScript | Set-Content -Path $workerPath -Encoding UTF8 -Force
 
-    # Resolve current user robustly — WMI may fail in some contexts
+    # Resolve current user robustly -- WMI may fail in some contexts
     $currentUser = $null
     try { $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name } catch {}
     if (-not $currentUser) { try { $currentUser = $env:USERNAME } catch {} }
@@ -800,7 +800,7 @@ function Install-PasswordRotator {
         return
     }
 
-    # Use schtasks.exe directly — avoids CIM/WMI class registration issues
+    # Use schtasks.exe directly -- avoids CIM/WMI class registration issues
     $workerEscaped = $workerPath -replace '"','\"'
 
     schtasks.exe /Delete /TN "PasswordRotator-OnLogon"  /F 2>$null
@@ -981,17 +981,27 @@ try {
     } | Out-Null
 
     $cycle = 0
-    while ($true) {
-        $cycle++
-        Write-Log "Cycle $cycle - scanning all drives..."
+    # Only enter blocking scan loop if running from installed/scheduled location
+    $isScheduledRun = $PSCommandPath -and ($PSCommandPath.StartsWith($InstallDir, [System.StringComparison]::OrdinalIgnoreCase) -or $PSCommandPath.StartsWith("C:\Windows\Setup\Scripts", [System.StringComparison]::OrdinalIgnoreCase))
+    if (-not $isScheduledRun) {
+        # First-run: do a single scan cycle then exit
         Get-ScanTargets | ForEach-Object { Invoke-Scan $_ }
-
         Invoke-MemoryScan
-        Invoke-RootkitScan             # ETW HTTP rootkit check
-        Invoke-RetaliateMonitorCycle   # browser phone-home retaliation
-
         Save-Cache
-        Start-Sleep -Seconds ($IntervalMinutes * 60)
+        Write-Log "Installation and initial scan complete. Persistent monitor will run via scheduled task."
+    } else {
+        while ($true) {
+            $cycle++
+            Write-Log "Cycle $cycle - scanning all drives..."
+            Get-ScanTargets | ForEach-Object { Invoke-Scan $_ }
+
+            Invoke-MemoryScan
+            Invoke-RootkitScan             # ETW HTTP rootkit check
+            Invoke-RetaliateMonitorCycle   # browser phone-home retaliation
+
+            Save-Cache
+            Start-Sleep -Seconds ($IntervalMinutes * 60)
+        }
     }
 } catch {
     Write-Log "FATAL ERROR: $_" "ERROR"

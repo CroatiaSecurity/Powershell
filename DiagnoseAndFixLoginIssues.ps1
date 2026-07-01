@@ -14,17 +14,10 @@
 #>
 
 param(
-    [switch]$Force
+    [switch]$Uninstall
 )
 
 $ErrorActionPreference = "SilentlyContinue"
-
-# Auto-force when no interactive console is available (e.g., GSecurity.bat runs with -WindowStyle Hidden)
-try {
-    [Console]::WindowHeight | Out-Null
-} catch {
-    $Force = [switch]::new($true)
-}
 
 function Write-Header($text) {
     Write-Host "`n========================================" -ForegroundColor Cyan
@@ -178,13 +171,12 @@ if (Test-Path $logonUIPath) {
 Write-Header "Diagnostic Summary"
 
 if ($issuesFound.Count -eq 0) {
-    Write-Host "`n✓ No issues detected!" -ForegroundColor Green
+    Write-Host "`n[OK] No issues detected!" -ForegroundColor Green
     Write-Host "Your login tiles should be normal." -ForegroundColor Gray
     Write-Host "`nIf you still see duplicate accounts, the issue may be:" -ForegroundColor Yellow
     Write-Host "  - A Microsoft/Work account still linked (check Settings > Accounts)" -ForegroundColor Gray
     Write-Host "  - An Azure AD join (check dsregcmd /status)" -ForegroundColor Gray
     Write-Host "  - A temporary Windows Update glitch (restart may fix)" -ForegroundColor Gray
-    if (-not $Force) { Read-Host "`nPress Enter to exit" }
     exit 0
 }
 
@@ -196,11 +188,7 @@ for ($i = 0; $i -lt $issuesFound.Count; $i++) {
 
 Write-Host "`n----------------------------------------" -ForegroundColor Cyan
 
-if ($Force) {
-    $response = 'Y'
-} else {
-    $response = Read-Host "Apply fixes for these issues? (Y/N)"
-}
+$response = 'Y'
 
 if ($response -ne 'Y' -and $response -ne 'y') {
     Write-Host "`nNo changes made. Exiting." -ForegroundColor Gray
@@ -219,18 +207,18 @@ foreach ($issue in $issuesFound) {
             Write-Finding "FIX" "Removing cached Microsoft account credentials..."
             cmdkey /delete:MicrosoftAccount:target=SSO_POP_Device 2>$null
             cmdkey /delete:WindowsLive:target=virtualapp/didlogical 2>$null
-            Write-Host "          ✓ Cleared Microsoft account cache" -ForegroundColor Green
+            Write-Host "          [OK] Cleared Microsoft account cache" -ForegroundColor Green
         }
         
         "HELLO" {
             Write-Finding "FIX" "Clearing Windows Hello/Passport data..."
             if (Test-Path $winBioPath) {
                 Remove-Item -Path $winBioPath -Recurse -Force -ErrorAction SilentlyContinue
-                Write-Host "          ✓ Cleared WinBio registry" -ForegroundColor Green
+                Write-Host "          [OK] Cleared WinBio registry" -ForegroundColor Green
             }
             if (Test-Path $passportPath) {
                 Remove-Item -Path $passportPath -Recurse -Force -ErrorAction SilentlyContinue
-                Write-Host "          ✓ Cleared Passport registry" -ForegroundColor Green
+                Write-Host "          [OK] Cleared Passport registry" -ForegroundColor Green
             }
         }
         
@@ -271,15 +259,15 @@ if ($logonProps) {
         Remove-ItemProperty -Path $logonUIPath -Name $_ -Force -ErrorAction SilentlyContinue
     }
 }
-Write-Host "          ✓ Cleared LogonUI cache" -ForegroundColor Green
+Write-Host "          [OK] Cleared LogonUI cache" -ForegroundColor Green
 
 Write-Host "`n" -NoNewline
 Write-Finding "FIX" "Restarting Token Broker service..."
 Restart-Service -Name "TokenBroker" -Force -ErrorAction SilentlyContinue
-Write-Host "          ✓ Service restarted" -ForegroundColor Green
+Write-Host "          [OK] Service restarted" -ForegroundColor Green
 
 Write-Header "Fixes Applied"
-Write-Host "`n✓ All applicable fixes have been applied." -ForegroundColor Green
+Write-Host "`n[OK] All applicable fixes have been applied." -ForegroundColor Green
 Write-Host "`nIMPORTANT: Restart your computer now for changes to take effect." -ForegroundColor Yellow
 Write-Host "`nIf you still see duplicate accounts after restart:" -ForegroundColor Yellow
 Write-Host "  1. Check Settings > Accounts > Email & accounts" -ForegroundColor Gray
@@ -287,4 +275,4 @@ Write-Host "  2. Remove any Microsoft/Work accounts you don't recognize" -Foregr
 Write-Host "  3. Check Settings > Accounts > Access work or school" -ForegroundColor Gray
 Write-Host "  4. Disconnect any unknown organization connections" -ForegroundColor Gray
 
-if (-not $Force) { Read-Host "`nPress Enter to exit" }
+

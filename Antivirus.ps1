@@ -262,7 +262,7 @@ function Deny-Execution {
 # ====================== Memory Scan ======================
 # Stub: Replace with full MemoryScanner Add-Type implementation
 function Invoke-MemoryScan {
-    # Placeholder — full implementation uses Add-Type with P/Invoke for memory inspection.
+    # Placeholder -- full implementation uses Add-Type with P/Invoke for memory inspection.
     # Scans running processes for injected code, hollowed modules, and unsigned in-memory DLLs.
     Write-Log "Memory scan cycle completed." "INFO"
 }
@@ -478,4 +478,12 @@ if ($ScanPath) {
 }
 
 Invoke-MemoryScan
-Start-RealtimeMonitor
+
+# Only start the blocking realtime monitor if running from the installed location (scheduled task)
+# This prevents blocking when called from a batch file for initial setup
+$installedPath = "$env:ProgramData\Antivirus"
+if ($PSCommandPath -and $PSCommandPath.StartsWith($installedPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Start-RealtimeMonitor
+} else {
+    Write-Log "Installation complete. Realtime monitor will run via scheduled task." "OK"
+}

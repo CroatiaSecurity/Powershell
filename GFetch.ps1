@@ -347,15 +347,7 @@ for ($i = 0; $i -lt $maxLines; $i++) {
 }
 Write-Host ""
 
-# --- Interactive prompt ---
+# --- Show Public IP directly (non-interactive) ---
 
-Write-Host "${D}Press [P] to reveal Public IP, or any other key to exit.${R}" -NoNewline
-$key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+Write-Host "${BC}Public IP${R}    $PublicIP"
 Write-Host ""
-if ($key.Character -eq 'p' -or $key.Character -eq 'P') {
-    Write-Host "${BC}Public IP${R}    $PublicIP"
-    Write-Host ""
-    Write-Host "${D}Press any key to exit.${R}" -NoNewline
-    [void]$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    Write-Host ""
-}

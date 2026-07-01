@@ -14,9 +14,18 @@ $kodiUserDataDir = "$env:APPDATA\Kodi"
 Write-Host "Downloading Kodi installer..."
 Invoke-WebRequest -Uri $kodiInstallerUrl -OutFile $kodiInstallerPath
 
-# Install Kodi silently
+# Install Kodi silently (non-blocking with timeout)
 Write-Host "Installing Kodi..."
-Start-Process -FilePath $kodiInstallerPath -ArgumentList "/S" -Wait
+$proc = Start-Process -FilePath $kodiInstallerPath -ArgumentList "/S" -PassThru
+$timeout = 300  # 5 minute max
+$elapsed = 0
+while (-not $proc.HasExited -and $elapsed -lt $timeout) {
+    Start-Sleep -Seconds 5
+    $elapsed += 5
+}
+if (-not $proc.HasExited) {
+    Write-Host "Kodi installer still running after $timeout seconds, continuing..." -ForegroundColor Yellow
+}
 
 # Wait for Kodi to initialize (optional)
 Start-Sleep -Seconds 10

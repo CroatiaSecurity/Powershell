@@ -15,7 +15,7 @@ $Script:TaskName = "RetaliateMonitor"
 $Script:InstallDir = "$env:ProgramData\Retaliate"
 $Script:ScriptName = "Retaliate.ps1"
 
-# ── Persistence ────────────────────────────────────────────────
+# -- Persistence ------------------------------------------------
 function Install-Persistence {
     $dir = $Script:InstallDir
     $dest = Join-Path $dir $Script:ScriptName
@@ -102,7 +102,7 @@ if (-not $existingTask) {
     }
 }
 
-# ── Helper ─────────────────────────────────────────────────────
+# -- Helper -----------------------------------------------------
 function Write-ColorOutput { param([string]$Message, [string]$Color = "White"); Write-Host $Message -ForegroundColor $Color }
 
 # --- Monitor mode (NTM) ---
@@ -298,5 +298,10 @@ function Start-ConnectionMonitoring {
     }
 }
 
-    # Start monitoring - this will run indefinitely until MonitoringActive is set to false
-    Start-ConnectionMonitoring
+    # Start monitoring only if running from installed location (scheduled task)
+    $installedDir = $Script:InstallDir
+    if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Start-ConnectionMonitoring
+    } else {
+        Write-ColorOutput "[OK] Retaliate installed. Monitor runs via scheduled task." "Green"
+    }

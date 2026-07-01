@@ -1,4 +1,4 @@
-﻿# KeyScrambler.ps1
+# KeyScrambler.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Anti-keylogger that injects random fake keystrokes around real typing using
 #              a low-level keyboard hook. You see only what you type; keyloggers capture noise.
@@ -14,7 +14,7 @@ $Script:TaskName = "KeyScramblerProtection"
 $Script:InstallDir = "$env:ProgramData\KeyScrambler"
 $Script:ScriptName = "KeyScrambler.ps1"
 
-# ── Persistence ────────────────────────────────────────────────
+# -- Persistence ------------------------------------------------
 function Install-Persistence {
     $dir = $Script:InstallDir
     $dest = Join-Path $dir $Script:ScriptName
@@ -92,7 +92,7 @@ if (-not $existingTask) {
     }
 }
 
-# ── KeyScrambler Core ──────────────────────────────────────────
+# -- KeyScrambler Core ------------------------------------------
 
 $Source = @"
 using System;
@@ -177,8 +177,8 @@ public class KeyScrambler
         if (_hookID == IntPtr.Zero)
             throw new Exception("Hook failed: " + Marshal.GetLastWin32Error());
 
-        Console.WriteLine("KeyScrambler ACTIVE — invisible mode ON");
-        Console.WriteLine("You see only your real typing • Keyloggers blinded");
+        Console.WriteLine("KeyScrambler ACTIVE -- invisible mode ON");
+        Console.WriteLine("You see only your real typing * Keyloggers blinded");
         Console.WriteLine("Close window or press Ctrl+C to stop");
 
         MSG msg;
@@ -216,7 +216,7 @@ public class KeyScrambler
     private static void Flood()
     {
         if (_rnd.NextDouble() < 0.5) return;           // 50% chance do nothing
-        int count = _rnd.Next(1, 7);               // 1–6 fake letters
+        int count = _rnd.Next(1, 7);               // 1-6 fake letters
         for (int i = 0; i < count; i++)
             InjectFakeChar((char)_rnd.Next('A', 'Z' + 1));
     }
@@ -232,7 +232,7 @@ public class KeyScrambler
 
             if (ModifiersDown()) return CallNextHookEx(_hookID, nCode, wParam, lParam);
 
-            if (k.vkCode >= 65 && k.vkCode <= 90)   // A–Z only
+            if (k.vkCode >= 65 && k.vkCode <= 90)   // A-Z only
             {
                 if (_rnd.NextDouble() < 0.75) Flood();           // before
                 var ret = CallNextHookEx(_hookID, nCode, wParam, lParam);
@@ -254,5 +254,10 @@ catch {
     exit
 }
 
-# Start it
-[KeyScrambler]::Start()
+# Start it - only if running from installed location (scheduled task)
+$installedDir = $Script:InstallDir
+if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+    [KeyScrambler]::Start()
+} else {
+    Write-Host "[OK] KeyScrambler installed. Will run via scheduled task at next logon." -ForegroundColor Green
+}

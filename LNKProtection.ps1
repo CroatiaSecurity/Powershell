@@ -15,7 +15,7 @@ $Script:InstallDir = "$env:ProgramData\LNKProtection"
 $Script:ScriptName = "LNKProtection.ps1"
 $Script:LogFile = "$Script:InstallDir\lnkprotection.log"
 
-# ── Logging ────────────────────────────────────────────────────
+# -- Logging ----------------------------------------------------
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -27,7 +27,7 @@ function Write-Log {
     else { Write-Host $entry }
 }
 
-# ── Persistence ────────────────────────────────────────────────
+# -- Persistence ------------------------------------------------
 function Install-Persistence {
     $dir = $Script:InstallDir
     $dest = Join-Path $dir $Script:ScriptName
@@ -102,7 +102,7 @@ function Uninstall-Persistence {
 if ($Install)   { Install-Persistence }
 if ($Uninstall) { Uninstall-Persistence }
 
-# ── Auto-install on first run ──────────────────────────────────
+# -- Auto-install on first run ----------------------------------
 $existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
 if (-not $existingTask) {
     Write-Log "First run detected, installing persistence..."
@@ -127,7 +127,7 @@ if (-not $existingTask) {
     }
 }
 
-# ── Main Protection Loop ──────────────────────────────────────
+# -- Main Protection Loop --------------------------------------
 Write-Log "LNKProtection starting..."
 
 $shell = New-Object -ComObject WScript.Shell
@@ -138,7 +138,26 @@ $paths = @(
     "$env:PUBLIC\Desktop"
 )
 
-while ($true) {
+# Only enter blocking loop if running from installed location (scheduled task)
+$installedDir = $Script:InstallDir
+if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+    while ($true) {
+        foreach ($path in $paths) {
+            if (!(Test-Path $path)) { continue }
+            Get-ChildItem $path -Recurse -Include *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
+                try {
+                    $target = $shell.CreateShortcut($_.FullName).TargetPath
+                    if ($target -like "\\*") {
+                        Write-Log "REMOVED malicious LNK pointing to UNC path: $($_.FullName) -> $target" "THREAT"
+                        Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                    }
+                } catch {}
+            }
+        }
+        Start-Sleep -Seconds 300  # Check every 5 minutes
+    }
+} else {
+    # First run: do a single scan pass and exit
     foreach ($path in $paths) {
         if (!(Test-Path $path)) { continue }
         Get-ChildItem $path -Recurse -Include *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
@@ -151,5 +170,5 @@ while ($true) {
             } catch {}
         }
     }
-    Start-Sleep -Seconds 300  # Check every 5 minutes
+    Write-Log "LNKProtection installed. Monitor runs via scheduled task."
 }

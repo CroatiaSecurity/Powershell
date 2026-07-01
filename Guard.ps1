@@ -304,11 +304,15 @@ foreach ($monitorPath in $targetFolders) {
 Remove-UnsignedDLLs
 Write-Log "Initial scan completed. Monitoring started."
  
-# Keep script running with crash protection
-Write-Host "Antivirus running. Press [Ctrl] + [C] to stop."
-try {
-    while ($true) { Start-Sleep -Seconds 10 }
-} catch {
-    Write-Log "Main loop crashed: $($_.Exception.Message)"
-    Write-Host "Script crashed. Check $logFile for details."
+# Only enter the blocking loop if running from the installed location (scheduled task)
+if ($PSCommandPath -and $PSCommandPath.StartsWith($scriptDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Write-Host "Antivirus running. Press [Ctrl] + [C] to stop."
+    try {
+        while ($true) { Start-Sleep -Seconds 10 }
+    } catch {
+        Write-Log "Main loop crashed: $($_.Exception.Message)"
+        Write-Host "Script crashed. Check $logFile for details."
+    }
+} else {
+    Write-Log "Installation and initial scan complete. Monitor will run via scheduled task."
 }

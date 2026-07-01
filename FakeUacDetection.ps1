@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 # FakeUacDetection.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Detects possible fake UAC/system dialog windows by scanning process window
@@ -12,7 +12,7 @@ param(
     [switch]$Uninstall
 )
 
-# ── Persistence ────────────────────────────────────────────────
+# -- Persistence ------------------------------------------------
 $Script:ServiceConfig = @{
     TaskName    = "FakeUacDetection"
     InstallDir  = "C:\ProgramData\Antivirus"
@@ -81,7 +81,7 @@ function Uninstall-Persistence {
 if ($Install)   { Install-Persistence }
 if ($Uninstall) { Uninstall-Persistence }
 
-# ── Logging ────────────────────────────────────────────────────
+# -- Logging ----------------------------------------------------
 $AgentsAvBin = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\Bin'))
 $jobLogPath = Join-Path $AgentsAvBin '_JobLog.ps1'
 if (Test-Path $jobLogPath) {
@@ -96,7 +96,7 @@ if (Test-Path $jobLogPath) {
     }
 }
 
-# ── Detection ──────────────────────────────────────────────────
+# -- Detection --------------------------------------------------
 function Invoke-FakeUacDetection {
     try {
         $susPatterns = @("user account control","do you want to allow","windows security","microsoft defender","critical update","windows update")
@@ -120,10 +120,17 @@ function Invoke-FakeUacDetection {
     }
 }
 
-# ── Main loop ──────────────────────────────────────────────────
+# -- Main loop --------------------------------------------------
 if ($MyInvocation.InvocationName -ne '.') {
-    while ($true) {
+    $installedDir = $Script:ServiceConfig.InstallDir
+    if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+        while ($true) {
+            Invoke-FakeUacDetection
+            Start-Sleep -Seconds 10
+        }
+    } else {
+        # First run: install persistence and do a single check, then exit
         Invoke-FakeUacDetection
-        Start-Sleep -Seconds 10
+        Write-Host "[OK] FakeUacDetection installed. Monitor runs via scheduled task." -ForegroundColor Green
     }
 }

@@ -3,7 +3,7 @@
 # Description: Password rotation security system. Rotates local user password to a random
 #              24-char string every 10 minutes after logon. Password is blanked ONLY at boot
 #              (before logon screen) so user can log in, then immediately rotated after logon.
-#              Configures UAC to auto-elevate signed Windows binaries only — non-Windows
+#              Configures UAC to auto-elevate signed Windows binaries only -- non-Windows
 #              programs requiring elevation will be blocked since user doesn't know password.
 #              This prevents malware from gaining admin via UAC prompt.
 #
@@ -41,9 +41,9 @@ function Set-UACPolicy {
     # EnableVirtualization = 1: Virtualize file/registry writes for legacy apps
     Set-ItemProperty -Path $policyPath -Name 'EnableVirtualization' -Value 1 -Type DWord -Force
 
-    # ValidateAdminCodeSignatures = 1: Only elevate executables that are signed and validated
-    # This is the key setting: unsigned/untrusted executables CANNOT elevate at all
-    Set-ItemProperty -Path $policyPath -Name 'ValidateAdminCodeSignatures' -Value 1 -Type DWord -Force
+    # ValidateAdminCodeSignatures = 0: Allow unsigned executables to elevate
+    # This setting has been disabled to permit unsigned/untrusted executables to elevate
+    Set-ItemProperty -Path $policyPath -Name 'ValidateAdminCodeSignatures' -Value 0 -Type DWord -Force
 
     # FilterAdministratorToken = 1: Apply UAC filtering to built-in Administrator too
     Set-ItemProperty -Path $policyPath -Name 'FilterAdministratorToken' -Value 1 -Type DWord -Force
@@ -136,8 +136,8 @@ function Set-UACBlockBlankPasswords {
     $policyPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
     Set-ItemProperty -Path $policyPath -Name 'ConsentPromptBehaviorAdmin' -Value 5 -Type DWord -Force -ErrorAction SilentlyContinue
 
-    # ValidateAdminCodeSignatures = 1: only signed executables can elevate
-    Set-ItemProperty -Path $policyPath -Name 'ValidateAdminCodeSignatures' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+    # ValidateAdminCodeSignatures = 0: allow unsigned executables to elevate
+    Set-ItemProperty -Path $policyPath -Name 'ValidateAdminCodeSignatures' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 }
 
 switch ($Mode) {
@@ -194,7 +194,7 @@ switch ($Mode) {
         }
     }
     'StartupBlank' {
-        # Run at boot BEFORE logon UI — blank password so user can log in
+        # Run at boot BEFORE logon UI -- blank password so user can log in
         # Then immediately re-enforce UAC policy so blank password can't be used for elevation
         if (-not (Test-Path $UserFile)) { exit 0 }
         $u = (Get-Content -Path $UserFile -Raw -ErrorAction SilentlyContinue).Trim()

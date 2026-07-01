@@ -615,7 +615,13 @@ try {
     Write-Log "RAM Cache: $($Config.RAMCacheSizeMB) MB"
     Write-Log "SSD Cache: $($Config.SSDCacheSizeGB) GB"
     
-    Start-CacheMonitoring
+    # Only enter blocking monitor loop if running from the installed location (scheduled task)
+    $installedDir = $Config.InstallPath
+    if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Start-CacheMonitoring
+    } else {
+        Write-Log "GameCache already installed. Monitoring runs via scheduled task."
+    }
 }
 catch {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

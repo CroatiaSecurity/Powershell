@@ -1,10 +1,10 @@
-﻿<#
+<#
 .SYNOPSIS
-    Ultimate Windows ISO Debloater – Fully interactive version
+    Ultimate Windows ISO Debloater - Fully automated version
     Author: Gorstak (gorstak.eu)
 .DESCRIPTION
     Strips bloatware, telemetry apps, and applies registry tweaks to a Windows ISO using
-    wimlib and an NTLite XML preset. Interactive file picker for ISO and preset selection.
+    wimlib and an NTLite XML preset. Requires -IsoPath and -XmlPath parameters.
     Supports -KeepStore, -KeepXbox, -KeepDefender, -KeepEdge, -KeepUpdates switches.
     One-time utility - produces a debloated ISO file.
 #>
@@ -12,6 +12,8 @@
 #Requires -RunAsAdministrator
 
 param (
+    [string]$IsoPath,
+    [string]$XmlPath,
     [switch]$KeepStore,
     [switch]$KeepXbox,
     [switch]$KeepDefender,
@@ -19,40 +21,34 @@ param (
     [switch]$KeepUpdates
 )
 
-Add-Type -AssemblyName System.Windows.Forms
-
-# ==============================
-# Helper: File picker dialog
-# ==============================
-function Select-File($title, $filter) {
-    $dlg = New-Object System.Windows.Forms.OpenFileDialog
-    $dlg.Title = $title
-    $dlg.Filter = $filter
-    $dlg.InitialDirectory = [Environment]::GetFolderPath("Desktop")
-    if ($dlg.ShowDialog() -eq "OK") {
-        return $dlg.FileName
-    } else {
-        Write-Host "Operation cancelled by user." -ForegroundColor Red
-        exit
+# Auto-detect ISO and XML if not provided
+if (-not $IsoPath) {
+    $IsoPath = Get-ChildItem "$PSScriptRoot\*.iso" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+    if (-not $IsoPath) {
+        $IsoPath = Get-ChildItem "$env:USERPROFILE\Desktop\*.iso" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+    }
+}
+if (-not $XmlPath) {
+    $XmlPath = Get-ChildItem "$PSScriptRoot\*.xml" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+    if (-not $XmlPath) {
+        $XmlPath = Get-ChildItem "$env:USERPROFILE\Desktop\*.xml" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
     }
 }
 
-# ==============================
-# 1. Ask user for ISO
-# ==============================
-Write-Host "Please select your original Windows ISO..." -ForegroundColor Cyan
-$IsoPath = Select-File "Select Windows ISO" "ISO files (*.iso)|*.iso"
+if (-not $IsoPath -or -not (Test-Path $IsoPath)) {
+    Write-Host "ERROR: No ISO file found. Provide -IsoPath or place a .iso in the script directory." -ForegroundColor Red
+    exit 1
+}
+if (-not $XmlPath -or -not (Test-Path $XmlPath)) {
+    Write-Host "ERROR: No XML preset found. Provide -XmlPath or place a .xml in the script directory." -ForegroundColor Red
+    exit 1
+}
 
-# ==============================
-# 2. Ask user for NTLite XML preset
-# ==============================
-Write-Host "Please select your NTLite preset XML file..." -ForegroundColor Cyan
-$XmlPath = Select-File "Select NTLite Preset XML" "XML files (*.xml)|*.xml|All files (*.*)|*.*"
-
+Write-Host "Using ISO: $IsoPath" -ForegroundColor Green
 Write-Host "Using preset: $XmlPath" -ForegroundColor Green
 
 # ==============================
-# 3. (Rest of the script – unchanged, just slightly cleaned)
+# 3. (Rest of the script - unchanged, just slightly cleaned)
 # ==============================
 
 function Get-Wimlib {
@@ -104,7 +100,7 @@ New-Item $mountDir -ItemType Directory -Force | Out-Null
 New-Item $extractDir -ItemType Directory -Force | Out-Null
 
 # Mount ISO & copy files
-Write-Host "Mounting and extracting ISO (this can take 5–15 minutes)..." -ForegroundColor Cyan
+Write-Host "Mounting and extracting ISO (this can take 5-15 minutes)..." -ForegroundColor Cyan
 $iso = Mount-DiskImage $IsoPath -PassThru
 $drive = ($iso | Get-Volume).DriveLetter + ":"
 Copy-Item "$drive\*" $extractDir -Recurse -Force
@@ -142,7 +138,7 @@ $apps = Get-AppxProvisionedPackage -Path $mountDir
 foreach ($app in $apps) {
     $name = $app.DisplayName + $app.PackageName
     if ($removeList | Where-Object { $name -match $_ }) {
-        Write-Host "  → Removing $($app.DisplayName)"
+        Write-Host "  -> Removing $($app.DisplayName)"
         Remove-AppxProvisionedPackage -Path $mountDir -PackageName $app.PackageName | Out-Null
     }
 }
@@ -171,7 +167,7 @@ foreach ($group in $xml.Preset.Tweaks.Settings.TweakGroup) {
             if (!(Test-Path $path)) { New-Item $path -Force | Out-Null }
             $type = if ($val -match '^\d+$') { "DWord" } else { "String" }
             Set-ItemProperty -Path $path -Name $key -Value $val -Type $type -Force
-            Write-Host "  → $full = $val"
+            Write-Host "  -> $full = $val"
         }
     }
 }

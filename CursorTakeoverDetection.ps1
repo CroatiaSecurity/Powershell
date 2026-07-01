@@ -1,8 +1,8 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 # CursorTakeoverDetection.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Samples cursor movement variance to detect automated/takeover patterns.
-#              Uses velocity variance analysis — low variance + movement indicates bot control.
+#              Uses velocity variance analysis -- low variance + movement indicates bot control.
 #              Persistent via scheduled task (cmdlet + schtasks fallback).
 # Samples cursor movement variance (rough heuristic for automation/takeover). No kernel input capture.
 
@@ -12,7 +12,7 @@ param(
     [switch]$Uninstall
 )
 
-# ── Persistence ────────────────────────────────────────────────
+# -- Persistence ------------------------------------------------
 $Script:ServiceConfig = @{
     TaskName    = "CursorTakeoverDetection"
     InstallDir  = "C:\ProgramData\Antivirus"
@@ -82,7 +82,7 @@ function Uninstall-Persistence {
 if ($Install)   { Install-Persistence }
 if ($Uninstall) { Uninstall-Persistence }
 
-# ── Logging ────────────────────────────────────────────────────
+# -- Logging ----------------------------------------------------
 $AgentsAvBin = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\Bin'))
 $jobLogPath = Join-Path $AgentsAvBin '_JobLog.ps1'
 if (Test-Path $jobLogPath) {
@@ -97,7 +97,7 @@ if (Test-Path $jobLogPath) {
     }
 }
 
-# ── Detection ──────────────────────────────────────────────────
+# -- Detection --------------------------------------------------
 function Invoke-CursorTakeoverDetection {
     try {
         Add-Type @"
@@ -134,11 +134,18 @@ public static class CursorProbe {
     }
 }
 
-# ── Main loop ──────────────────────────────────────────────────
+# -- Main loop --------------------------------------------------
 if ($MyInvocation.InvocationName -ne '.') {
-    # When dot-sourced, just expose the function. When run directly, loop.
-    while ($true) {
+    # When dot-sourced, just expose the function. When run directly, check if from scheduled task.
+    $installedDir = $Script:ServiceConfig.InstallDir
+    if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+        while ($true) {
+            Invoke-CursorTakeoverDetection
+            Start-Sleep -Seconds 3
+        }
+    } else {
+        # First run: install persistence and do a single check, then exit
         Invoke-CursorTakeoverDetection
-        Start-Sleep -Seconds 3
+        Write-Host "[OK] CursorTakeoverDetection installed. Monitor runs via scheduled task." -ForegroundColor Green
     }
 }

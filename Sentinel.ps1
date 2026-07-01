@@ -1158,4 +1158,11 @@ function Uninstall-Sentinel {
 # ============================================================================
 if ($Uninstall) { Uninstall-Sentinel }
 Install-Startup
-Start-Sentinel
+
+# Only start the blocking monitor loop if running from the installed location (scheduled task)
+$installedDir = "$env:ProgramData\Antivirus"
+if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Start-Sentinel
+} else {
+    Write-Host "  [OK] Sentinel installed. Monitor will run via scheduled task." -ForegroundColor Green
+}

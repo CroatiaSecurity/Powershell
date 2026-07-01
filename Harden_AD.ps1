@@ -178,11 +178,8 @@ try {
 Write-Output "Hardening script completed at $(Get-Date). Review $logFile for details." | Out-File -FilePath $logFile -Append
 Write-Host "Hardening complete. Check $logFile for logs. Reboot may be required for some changes to take effect."
 
-# Prompt for reboot if updates were installed
+# Auto-reboot if updates require it
 if ($installResult -and $installResult.RebootRequired) {
-    Write-Host "A reboot is required to complete update installation. Reboot now? (Y/N)"
-    $response = Read-Host
-    if ($response -eq 'Y') {
-        Restart-Computer -Force
-    }
+    Write-Host "A reboot is required to complete update installation. Scheduling reboot in 60 seconds..."
+    shutdown /r /t 60 /c "Reboot required for security updates"
 }

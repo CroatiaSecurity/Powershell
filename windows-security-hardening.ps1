@@ -1171,27 +1171,27 @@ function Show-SecurityRecommendations {
     Write-Host ""
     Write-Host '=== HTB-Specific Protection Summary ===' -ForegroundColor Cyan
     Write-Host 'This script now protects against:' -ForegroundColor Yellow
-    Write-Host '  ✓ SMB enumeration and EternalBlue-style attacks' -ForegroundColor Green
-    Write-Host '  ✓ RDP and WinRM brute-force attacks' -ForegroundColor Green
-    Write-Host '  ✓ Credential dumping (Mimikatz-style attacks)' -ForegroundColor Green
-    Write-Host '  ✓ Pass-the-hash attacks' -ForegroundColor Green
-    Write-Host '  ✓ LLMNR/NBT-NS poisoning' -ForegroundColor Green
-    Write-Host '  ✓ Unquoted service path privilege escalation' -ForegroundColor Green
-    Write-Host '  ✓ DLL hijacking vectors' -ForegroundColor Green
-    Write-Host '  ✓ PowerShell LOLBins abuse' -ForegroundColor Green
-    Write-Host '  ✓ WMI lateral movement' -ForegroundColor Green
-    Write-Host '  ✓ AlwaysInstallElevated exploitation' -ForegroundColor Green
-    Write-Host '  ✓ Anonymous SMB access' -ForegroundColor Green
-    Write-Host '  ✓ Drive-by downloads (SmartScreen, DEP, browser hardening)' -ForegroundColor Green
-    Write-Host '  ✓ Physical security attacks (Sticky Keys, USB protection)' -ForegroundColor Green
-    Write-Host '  ✓ COM hijacking prevention' -ForegroundColor Green
-    Write-Host '  ✓ Account lockout policies (brute-force protection)' -ForegroundColor Green
-    Write-Host '  ✓ Screen saver lock (prevents unauthorized access)' -ForegroundColor Green
-    Write-Host '  ✓ SMB signing enforced (prevents credential interception)' -ForegroundColor Green
-    Write-Host '  ✓ Enhanced auditing (comprehensive security logging)' -ForegroundColor Green
-    Write-Host '  ✓ NULL session restrictions (prevents anonymous enumeration)' -ForegroundColor Green
-    Write-Host '  ✓ BCD bootkit detection (suspicious boot entries)' -ForegroundColor Green
-    Write-Host '  ✓ Browser hardening (Chrome Remote Desktop, Firefox WebRTC)' -ForegroundColor Green
+    Write-Host '  [OK] SMB enumeration and EternalBlue-style attacks' -ForegroundColor Green
+    Write-Host '  [OK] RDP and WinRM brute-force attacks' -ForegroundColor Green
+    Write-Host '  [OK] Credential dumping (Mimikatz-style attacks)' -ForegroundColor Green
+    Write-Host '  [OK] Pass-the-hash attacks' -ForegroundColor Green
+    Write-Host '  [OK] LLMNR/NBT-NS poisoning' -ForegroundColor Green
+    Write-Host '  [OK] Unquoted service path privilege escalation' -ForegroundColor Green
+    Write-Host '  [OK] DLL hijacking vectors' -ForegroundColor Green
+    Write-Host '  [OK] PowerShell LOLBins abuse' -ForegroundColor Green
+    Write-Host '  [OK] WMI lateral movement' -ForegroundColor Green
+    Write-Host '  [OK] AlwaysInstallElevated exploitation' -ForegroundColor Green
+    Write-Host '  [OK] Anonymous SMB access' -ForegroundColor Green
+    Write-Host '  [OK] Drive-by downloads (SmartScreen, DEP, browser hardening)' -ForegroundColor Green
+    Write-Host '  [OK] Physical security attacks (Sticky Keys, USB protection)' -ForegroundColor Green
+    Write-Host '  [OK] COM hijacking prevention' -ForegroundColor Green
+    Write-Host '  [OK] Account lockout policies (brute-force protection)' -ForegroundColor Green
+    Write-Host '  [OK] Screen saver lock (prevents unauthorized access)' -ForegroundColor Green
+    Write-Host '  [OK] SMB signing enforced (prevents credential interception)' -ForegroundColor Green
+    Write-Host '  [OK] Enhanced auditing (comprehensive security logging)' -ForegroundColor Green
+    Write-Host '  [OK] NULL session restrictions (prevents anonymous enumeration)' -ForegroundColor Green
+    Write-Host '  [OK] BCD bootkit detection (suspicious boot entries)' -ForegroundColor Green
+    Write-Host '  [OK] Browser hardening (Chrome Remote Desktop, Firefox WebRTC)' -ForegroundColor Green
     Write-Host ""
 }
 
