@@ -1,3 +1,13 @@
+# Hardening.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Comprehensive Windows and Active Directory hardening script combining
+#              password policies, credential protection, service account security, privileged
+#              access management, auditing, patch management, legacy protocol disabling,
+#              remote access lockdown, Defender configuration, BCD cleanup, browser security,
+#              NULL session disabling, network debloating, IP blocking, and DNS ad blocking.
+#              Installs daily patching scheduled task.
+#Requires -RunAsAdministrator
+
 # Enhanced PowerShell Script to Harden Windows and Active Directory
 # Author: Gorstak
 

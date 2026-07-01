@@ -1,4 +1,10 @@
-# Corrupt.ps1 by Gorstak
+# Corrupt.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Anti-telemetry script that overwrites telemetry/tracking files from Microsoft,
+#              NVIDIA, Google, Adobe, Intel, AMD, Steam, Epic, Discord, and other vendors with
+#              random data every hour. Installs as persistent scheduled task and runs as
+#              background job.
+#Requires -RunAsAdministrator
 
 # Ensure the script isn't running multiple times
 $currentScript = $PSCommandPath
@@ -62,14 +68,30 @@ function Register-SystemLogonScript {
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
-    # Register the task
+    # Register the task (cmdlet first, schtasks fallback)
+    $installed = $false
     try {
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal
-        Write-Output "Scheduled task '$TaskName' created to run at user logon under SYSTEM."
+        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -ErrorAction Stop
+        Write-Output "Scheduled task '$TaskName' created via Register-ScheduledTask."
+        $installed = $true
     } catch {
-        Write-Output "Failed to register task: $_"
-        exit 1
+        Write-Output "Register-ScheduledTask failed: $_"
+    }
+
+    # Fallback to schtasks.exe
+    if (-not $installed) {
+        try {
+            $schtasksCmd = "schtasks /Create /TN `"$TaskName`" /TR `"powershell.exe -ExecutionPolicy Bypass -File \`"$targetPath\`"`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
+            $result = cmd /c $schtasksCmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Output "Scheduled task '$TaskName' created via schtasks.exe fallback."
+            } else {
+                Write-Output "schtasks fallback failed: $result"
+            }
+        } catch {
+            Write-Output "schtasks fallback exception: $_"
+        }
     }
 }
 

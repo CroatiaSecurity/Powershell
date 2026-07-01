@@ -2,6 +2,7 @@
 <#
 .SYNOPSIS
     Diagnose and fix duplicate/phantom login account issues on Windows 10/11
+    Author: Gorstak (gorstak.eu)
 
 .DESCRIPTION
     This script detects the type of login issue you're experiencing and
@@ -9,9 +10,21 @@
 
 .EXAMPLE
     .\DiagnoseAndFixLoginIssues.ps1
+    .\DiagnoseAndFixLoginIssues.ps1 -Force
 #>
 
+param(
+    [switch]$Force
+)
+
 $ErrorActionPreference = "SilentlyContinue"
+
+# Auto-force when no interactive console is available (e.g., GSecurity.bat runs with -WindowStyle Hidden)
+try {
+    [Console]::WindowHeight | Out-Null
+} catch {
+    $Force = [switch]::new($true)
+}
 
 function Write-Header($text) {
     Write-Host "`n========================================" -ForegroundColor Cyan
@@ -171,7 +184,7 @@ if ($issuesFound.Count -eq 0) {
     Write-Host "  - A Microsoft/Work account still linked (check Settings > Accounts)" -ForegroundColor Gray
     Write-Host "  - An Azure AD join (check dsregcmd /status)" -ForegroundColor Gray
     Write-Host "  - A temporary Windows Update glitch (restart may fix)" -ForegroundColor Gray
-    Read-Host "`nPress Enter to exit"
+    if (-not $Force) { Read-Host "`nPress Enter to exit" }
     exit 0
 }
 
@@ -182,7 +195,12 @@ for ($i = 0; $i -lt $issuesFound.Count; $i++) {
 }
 
 Write-Host "`n----------------------------------------" -ForegroundColor Cyan
-$response = Read-Host "Apply fixes for these issues? (Y/N)"
+
+if ($Force) {
+    $response = 'Y'
+} else {
+    $response = Read-Host "Apply fixes for these issues? (Y/N)"
+}
 
 if ($response -ne 'Y' -and $response -ne 'y') {
     Write-Host "`nNo changes made. Exiting." -ForegroundColor Gray
@@ -269,4 +287,4 @@ Write-Host "  2. Remove any Microsoft/Work accounts you don't recognize" -Foregr
 Write-Host "  3. Check Settings > Accounts > Access work or school" -ForegroundColor Gray
 Write-Host "  4. Disconnect any unknown organization connections" -ForegroundColor Gray
 
-Read-Host "`nPress Enter to exit"
+if (-not $Force) { Read-Host "`nPress Enter to exit" }

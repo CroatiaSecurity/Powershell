@@ -1,3 +1,9 @@
+# IPSecPolicy.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Creates and assigns a legacy IPsec policy (visible in secpol.msc) that blocks
+#              inbound and outbound traffic on Telnet (23), SSH (22), and RDP (3389) ports.
+#              One-time configuration utility.
+
 # Create and Assign GSecurity IPsec Policy using netsh (legacy IPsec compatible with secpol.msc)
 # Blocks traffic to Telnet (23), SSH (22), and RDP (3389) ports
 

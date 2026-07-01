@@ -1,4 +1,9 @@
 ﻿#Requires -RunAsAdministrator
+# CursorTakeoverDetection.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Samples cursor movement variance to detect automated/takeover patterns.
+#              Uses velocity variance analysis — low variance + movement indicates bot control.
+#              Persistent via scheduled task (cmdlet + schtasks fallback).
 # Samples cursor movement variance (rough heuristic for automation/takeover). No kernel input capture.
 
 param(
@@ -25,17 +30,39 @@ function Install-Persistence {
     $existing = Get-ScheduledTask -TaskName $Script:ServiceConfig.TaskName -ErrorAction SilentlyContinue
     if ($existing) { Unregister-ScheduledTask -TaskName $Script:ServiceConfig.TaskName -Confirm:$false }
 
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-        -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-    $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    $installed = $false
 
-    Register-ScheduledTask -TaskName $Script:ServiceConfig.TaskName `
-        -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
-        -Description "Cursor takeover detection monitor (Gorstak)" | Out-Null
+    # Method 1: PowerShell cmdlets
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
 
-    Write-Host "[OK] $($Script:ServiceConfig.TaskName) installed and will run at logon." -ForegroundColor Green
+        Register-ScheduledTask -TaskName $Script:ServiceConfig.TaskName `
+            -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
+            -Description "Cursor takeover detection monitor (Gorstak)" | Out-Null
+        Write-Host "[OK] $($Script:ServiceConfig.TaskName) installed via Register-ScheduledTask." -ForegroundColor Green
+        $installed = $true
+    } catch {
+        Write-Host "[WARN] Register-ScheduledTask failed: $_" -ForegroundColor Yellow
+    }
+
+    # Method 2: schtasks.exe fallback
+    if (-not $installed) {
+        try {
+            $cmd = "schtasks /Create /TN `"$($Script:ServiceConfig.TaskName)`" /TR `"powershell.exe $pwshArgs`" /SC ONLOGON /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[OK] $($Script:ServiceConfig.TaskName) installed via schtasks.exe fallback." -ForegroundColor Green
+            } else {
+                Write-Host "[ERROR] schtasks fallback failed: $result" -ForegroundColor Red
+            }
+        } catch {
+            Write-Host "[ERROR] schtasks exception: $_" -ForegroundColor Red
+        }
+    }
     exit 0
 }
 

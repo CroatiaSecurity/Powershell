@@ -1,4 +1,14 @@
 $Source = @"
+# Unhooker.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: AMSI and ETW unhooking utility for Windows 11 26H1+. Patches AmsiScanBuffer,
+#              AmsiScanString, AmsiOpenSession, EtwEventWrite, EtwEventWriteFull,
+#              EtwEventWriteEx, EtwEventWriteTransfer, and NtTraceEvent using direct
+#              syscalls via ntdll export resolution (no LoadLibrary). Supports x86 and x64.
+#              One-time run utility for security research.
+#>
+
+$Source = @"
 using System;
 using System.Runtime;
 using System.Runtime.InteropServices;

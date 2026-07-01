@@ -1,7 +1,12 @@
 <#
 .SYNOPSIS
     GFetch - A Neofetch/Winfetch style system info script for Windows
+    Author: Gorstak (gorstak.eu)
     Compatible with Windows 10+ (PowerShell 5.1+)
+.DESCRIPTION
+    Displays system information in a visually appealing format including OS, CPU, GPU,
+    memory, disk, network, battery, .NET version, Defender status, and more.
+    Interactive utility, no persistence needed.
 #>
 
 # --- Gather System Info ---

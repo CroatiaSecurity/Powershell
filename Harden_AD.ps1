@@ -1,3 +1,12 @@
+# Harden_AD.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Active Directory and Windows domain hardening script. Configures password
+#              policies, secures service accounts, limits credential caching, restricts
+#              privileged access, enables AD auditing, installs critical updates, disables
+#              NTLM, configures Defender, enforces SMB signing, and cleans stale accounts.
+#              Requires Domain Admin or Local Admin. One-time run utility.
+#Requires -RunAsAdministrator
+
 # PowerShell Script to Harden Windows and Active Directory Against Credential Theft and AD Attacks
 # Requires: Domain Admin or Local Admin privileges, ActiveDirectory module
 # Run on: Windows Server 2019/2022 (DC) or Windows 10/11 (client)

@@ -1,3 +1,11 @@
+# IPBlock.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Downloads malware-focused IP blocklists (Spamhaus DROP, Emerging Threats,
+#              Feodo Tracker, CINS, Talos, FireHOL), validates and deduplicates IPs, then
+#              creates Windows Firewall rules to block inbound/outbound traffic.
+#              Supports -DryRun mode for preview. One-time run utility.
+#Requires -RunAsAdministrator
+
 # Function to check if running with elevated privileges (as Administrator)
 function Test-IsAdmin {
     $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()

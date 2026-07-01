@@ -1,7 +1,12 @@
 ﻿# GRules.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Downloads, parses, and applies YARA, Sigma, and Snort rules from public
+#              threat intelligence feeds. Extracts IOCs (hashes, IPs, domains, filenames),
+#              creates Windows Firewall rules for C2 blocking, applies ASR rules, and monitors
+#              process creation events. Supports scheduled hourly execution.
+#Requires -RunAsAdministrator
+
 # Windows security script focusing on security rules with enhanced ASR rule application
-# Author: Gorstak, optimized by Grok
-# Description: Downloads, parses, and applies YARA, Sigma, and Snort rules, including all applicable ASR rules
 
 param (
     [switch]$Monitor,

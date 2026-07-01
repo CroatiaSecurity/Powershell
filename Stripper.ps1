@@ -1,7 +1,12 @@
 ﻿<#
 .SYNOPSIS
     Ultimate Windows ISO Debloater – Fully interactive version
-    Author: Gorstak
+    Author: Gorstak (gorstak.eu)
+.DESCRIPTION
+    Strips bloatware, telemetry apps, and applies registry tweaks to a Windows ISO using
+    wimlib and an NTLite XML preset. Interactive file picker for ISO and preset selection.
+    Supports -KeepStore, -KeepXbox, -KeepDefender, -KeepEdge, -KeepUpdates switches.
+    One-time utility - produces a debloated ISO file.
 #>
 
 #Requires -RunAsAdministrator

@@ -1,5 +1,10 @@
 # Guard.ps1
-# Author: Gorstak
+# Author: Gorstak (gorstak.eu)
+# Description: DLL integrity monitor and quarantine engine. Scans Program Files and AppData
+#              for unsigned DLLs, quarantines them, stops processes using malicious modules,
+#              and monitors for new DLL creation via FileSystemWatcher. Persistent via
+#              scheduled task with cmdlet-first, schtasks fallback.
+#Requires -RunAsAdministrator
  
 # Define paths and parameters
 $taskName = "GuardStartup"
@@ -50,6 +55,41 @@ if (-not (Test-Path $scriptDir)) {
 if (-not (Test-Path $scriptPath) -or (Get-Item $scriptPath).LastWriteTime -lt (Get-Item $MyInvocation.MyCommand.Path).LastWriteTime) {
     Copy-Item -Path $MyInvocation.MyCommand.Path -Destination $scriptPath -Force -ErrorAction Stop
     Write-Log "Copied/Updated script to: $scriptPath"
+}
+
+# Register scheduled task (cmdlet first, schtasks fallback)
+$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if (-not $existingTask -and $isAdmin) {
+    $pwshArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
+    $installed = $false
+
+    # Method 1: PowerShell cmdlets
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $taskDescription -Force | Out-Null
+        Write-Log "Persistence installed via Register-ScheduledTask."
+        $installed = $true
+    } catch {
+        Write-Log "Register-ScheduledTask failed: $_"
+    }
+
+    # Method 2: schtasks.exe fallback
+    if (-not $installed) {
+        try {
+            $cmd = "schtasks /Create /TN `"$taskName`" /TR `"powershell.exe $pwshArgs`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "Persistence installed via schtasks.exe fallback."
+            } else {
+                Write-Log "schtasks fallback failed: $result"
+            }
+        } catch {
+            Write-Log "schtasks fallback exception: $_"
+        }
+    }
 }
  
 # Load or Reset Scanned Files Database

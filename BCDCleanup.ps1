@@ -1,4 +1,9 @@
 #requires -RunAsAdministrator
+# BCDCleanup.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Enumerates Boot Configuration Data (BCD) entries, identifies suspicious
+#              non-Windows boot entries (VHD, non-standard paths), backs up BCD store,
+#              and removes suspicious entries automatically. One-time run utility.
 
 # Fully automated script to enumerate and clean up suspicious BCD entries
 # Designed for batch file compatibility, with no user input

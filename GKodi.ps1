@@ -1,3 +1,9 @@
+# GKodi.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Automated Kodi media center installer. Downloads and silently installs Kodi,
+#              enables web server, adds streaming addon repositories (The Crew, Venom, Seren),
+#              and launches Kodi. One-time setup utility.
+
 # Define paths and URLs
 $kodiInstallerUrl = "https://mirrors.kodi.tv/releases/windows/win64/kodi-20.2-Nexus-x64.exe"
 $kodiInstallerPath = "$env:TEMP\kodi-installer.exe"

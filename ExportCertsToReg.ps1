@@ -2,6 +2,11 @@
 .SYNOPSIS
     Connects to target domains via TLS, exports their certificates, and generates
     registry entries to block them in the Windows Disallowed certificate store.
+    Author: Gorstak (gorstak.eu)
+.DESCRIPTION
+    Connects to intelligence/security agency domains worldwide, extracts their TLS
+    certificates, and produces a .reg file to add them to the Disallowed certificate
+    store. One-time utility for certificate-based domain blocking.
 
 .PARAMETER OutputFile
     Path to the output .reg file. Defaults to CertsExport.reg next to the script.

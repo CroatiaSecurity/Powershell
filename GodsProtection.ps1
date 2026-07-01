@@ -1,3 +1,11 @@
+# GodsProtection.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Divine security suite for single-user home PCs. Configures local security
+#              policy, disables remote/AD/Azure services, locks down firewall, cleans
+#              certificates, hardens registry, removes bowser.sys, and monitors for
+#              unauthorized changes with automatic reversion every 5 minutes.
+#              Persistent via scheduled task (cmdlet + schtasks fallback).
+
 param(
     [switch]$Uninstall,
     [string]$Mode  # Internal use: "Monitor" for scheduled task checks

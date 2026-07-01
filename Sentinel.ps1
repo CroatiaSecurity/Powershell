@@ -3,6 +3,7 @@
 <#
 .SYNOPSIS
     Windows Sentinel v1.0 - Behavioral EDR for Windows 10/11
+    Author: Gorstak (gorstak.eu)
 .DESCRIPTION
     Behavioral endpoint detection and response. Detects threats by what
     processes DO, not what they're called. Assumes the attacker has read

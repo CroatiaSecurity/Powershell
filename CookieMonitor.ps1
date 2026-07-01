@@ -1,7 +1,14 @@
+# CookieMonitor.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Monitors Chrome cookie database for unauthorized changes (session hijacking).
+#              Backs up cookies at startup, detects hash changes, and restores cookies from
+#              backup on tampering. Installs persistent scheduled tasks for monitoring
+#              (every 5 min) and backup (startup).
+#Requires -RunAsAdministrator
+
 param(
     [switch]$Monitor,
-    [switch]$Backup,
-    [switch]$ResetPassword
+    [switch]$Backup
 )
 
 # === Configuration ===
@@ -9,7 +16,6 @@ $taskScriptPath = "C:\Windows\Setup\Scripts\Bin\CookieMonitor.ps1"
 $logDir = "C:\logs"
 $backupDir = "$env:ProgramData\CookieBackup"
 $cookieLogPath = "$backupDir\CookieMonitor.log"
-$passwordLogPath = "$backupDir\NewPassword.log"
 $errorLogPath = "$backupDir\ScriptErrors.log"
 $cookiePath = "$env:LocalAppData\Google\Chrome\User Data\Default\Cookies"
 $backupPath = "$backupDir\Cookies.bak"
@@ -45,23 +51,43 @@ function Install-Script {
     Log-Info "Script copied to $taskScriptPath"
 
     # Unregister all tasks to prevent conflicts
-    $taskNames = @("MonitorCookiesLogon", "BackupCookiesOnStartup", "MonitorCookies", "ResetPasswordOnShutdown")
+    $taskNames = @("MonitorCookiesLogon", "BackupCookiesOnStartup", "MonitorCookies")
     foreach ($taskName in $taskNames) {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     }
 
-    # SYSTEM logon task
+    # SYSTEM logon task (cmdlet first, schtasks fallback)
     $logonTaskName = "MonitorCookiesLogon"
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$taskScriptPath`""
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    Register-ScheduledTask -TaskName $logonTaskName -Action $action -Trigger $trigger -Principal $principal
+    $logonInstalled = $false
+    try {
+        Register-ScheduledTask -TaskName $logonTaskName -Action $action -Trigger $trigger -Principal $principal -ErrorAction Stop
+        $logonInstalled = $true
+    } catch {
+        Log-Info "Register-ScheduledTask failed for $logonTaskName, trying schtasks..."
+    }
+    if (-not $logonInstalled) {
+        $schtasksCmd = "schtasks /Create /TN `"$logonTaskName`" /TR `"powershell.exe -ExecutionPolicy Bypass -File \`"$taskScriptPath\`"`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
+        cmd /c $schtasksCmd 2>&1 | Out-Null
+    }
 
-    # Startup backup task
+    # Startup backup task (cmdlet first, schtasks fallback)
     $backupTaskName = "BackupCookiesOnStartup"
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$taskScriptPath`" -Backup"
     $trigger = New-ScheduledTaskTrigger -AtStartup
-    Register-ScheduledTask -TaskName $backupTaskName -Action $action -Trigger $trigger -Principal $principal
+    $backupInstalled = $false
+    try {
+        Register-ScheduledTask -TaskName $backupTaskName -Action $action -Trigger $trigger -Principal $principal -ErrorAction Stop
+        $backupInstalled = $true
+    } catch {
+        Log-Info "Register-ScheduledTask failed for $backupTaskName, trying schtasks..."
+    }
+    if (-not $backupInstalled) {
+        $schtasksCmd = "schtasks /Create /TN `"$backupTaskName`" /TR `"powershell.exe -ExecutionPolicy Bypass -File \`"$taskScriptPath\`" -Backup`" /SC ONSTART /RU SYSTEM /RL HIGHEST /F"
+        cmd /c $schtasksCmd 2>&1 | Out-Null
+    }
 
     # Monitoring task (every 5 min)
     $monitorTaskName = "MonitorCookies"
@@ -82,30 +108,6 @@ function Install-Script {
     $taskDefinition.Settings.StartWhenAvailable = $true
     $taskService.GetFolder("\").RegisterTaskDefinition($monitorTaskName, $taskDefinition, 6, "SYSTEM", $null, 4)
 
-    # Shutdown password reset
-    $shutdownTaskName = "ResetPasswordOnShutdown"
-    $eventTriggerQuery = @"
-<QueryList>
-  <Query Id="0" Path="System">
-    <Select Path="System">*[System[(EventID=1074)]]</Select>
-  </Query>
-</QueryList>
-"@
-    $taskService = New-Object -ComObject Schedule.Service
-    $taskService.Connect()
-    $taskDefinition = $taskService.NewTask(0)
-    $triggers = $taskDefinition.Triggers
-    $eventTrigger = $triggers.Create(0)
-    $eventTrigger.Subscription = $eventTriggerQuery
-    $eventTrigger.Enabled = $true
-    $action = $taskDefinition.Actions.Create(0)
-    $action.Path = "powershell.exe"
-    $action.Arguments = "-ExecutionPolicy Bypass -File `"$taskScriptPath`" -ResetPassword"
-    $taskDefinition.Settings.Enabled = $true
-    $taskDefinition.Settings.AllowDemandStart = $true
-    $taskDefinition.Settings.StartWhenAvailable = $true
-    $taskService.GetFolder("\").RegisterTaskDefinition($shutdownTaskName, $taskDefinition, 6, "SYSTEM", $null, 4)
-
     Log-Info "Scheduled tasks installed."
 }
 
@@ -122,8 +124,7 @@ function Monitor-Cookies {
         $lastHash = if (Test-Path $hashFile) { (Get-Content $hashFile -Raw).Trim() } else { "" }
 
         if ($lastHash -and $currentHash -ne $lastHash) {
-            Log-Info "Cookie hash changed. Triggering countermeasure..."
-            Rotate-Password
+            Log-Info "Cookie hash changed. Restoring from backup..."
             Restore-Cookies
         }
 
@@ -159,51 +160,11 @@ function Restore-Cookies {
     }
 }
 
-# === Password Rotation ===
-function Rotate-Password {
-    try {
-        $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name.Split("\")[1]
-        $account = Get-LocalUser -Name $user
-        if ($account.UserPrincipalName) {
-            Log-Info "Skipping Microsoft account password change."
-            return
-        }
-
-        $chars = [char[]]('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*')
-        $password = -join ($chars | Get-Random -Count 16)
-        $securePassword = ConvertTo-SecureString -String $password -AsPlainText -Force
-        Set-LocalUser -Name $user -Password $securePassword
-        "$((Get-Date).ToString()) - New password: $password" | Out-File -FilePath $passwordLogPath -Append
-        Log-Info "Rotated local password."
-    } catch {
-        Log-Error "Rotate-Password error: $_"
-    }
-}
-
-# === Blank Password on Shutdown ===
-function Reset-Password {
-    try {
-        $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name.Split("\")[1]
-        $account = Get-LocalUser -Name $user
-        if ($account.UserPrincipalName) {
-            Log-Info "Skipping Microsoft account reset."
-            return
-        }
-
-        $blank = ConvertTo-SecureString "" -AsPlainText -Force
-        Set-LocalUser -Name $user -Password $blank
-        Log-Info "Password reset to blank on shutdown."
-    } catch {
-        Log-Error "Reset-Password error: $_"
-    }
-}
-
 # === Entry Point ===
 Initialize-Environment
 
 if ($Monitor) { Monitor-Cookies; return }
 if ($Backup) { Backup-Cookies; return }
-if ($ResetPassword) { Reset-Password; return }
 
 # Main install
 Install-Script

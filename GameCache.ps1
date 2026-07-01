@@ -8,7 +8,7 @@
     Automatically manages file caching across RAM and SSD tiers using symlinks
     Implements LRU eviction and transparent file access
 .NOTES
-    Author: Gorstak
+    Author: Gorstak (gorstak.eu)
     Version: 1.0
 #>
 

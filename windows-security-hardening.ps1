@@ -1,3 +1,11 @@
+# windows-security-hardening.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Comprehensive Windows security hardening script that disables unnecessary
+#              services, hardens firewall, disables dangerous features (SMBv1, LLMNR, PSv2),
+#              enforces secure registry values (UAC, LSA protection, WDigest disable), hardens
+#              user accounts, enforces SMB signing, enables audit policies, and prevents common
+#              privilege escalation vectors. One-time run with -VerifyOnly check mode.
+
 # Windows Security Hardening Script
 # This script hardens Windows security to prevent unauthorized access
 # It only applies preventative measures and will not help if the system is already compromised

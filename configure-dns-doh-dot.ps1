@@ -1,4 +1,11 @@
 #Requires -RunAsAdministrator
+# configure-dns-doh-dot.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Configures DNS-over-HTTPS (DoH) and DNS-over-TLS (DoT) with Cloudflare
+#              as primary and Google as secondary. Registers DoH templates, sets DNS
+#              servers via netsh, and configures per-interface registry settings.
+#              One-time configuration utility.
+
 # Configures DoH (Cloudflare primary, Google secondary) with DoT on both
 
 # Register DoH server templates in Windows

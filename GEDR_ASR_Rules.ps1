@@ -1,3 +1,10 @@
+# GEDR_ASR_Rules.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Applies Attack Surface Reduction (ASR) rules to Windows Defender including
+#              blocking Office child processes, script execution, executable email attachments,
+#              macros from Internet, and USB execution. One-time configuration utility.
+#Requires -RunAsAdministrator
+
 # GEDR ASR Rules PowerShell Script
 # Attack Surface Reduction rules for Windows Defender
 # Run as Administrator

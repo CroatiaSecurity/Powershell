@@ -1,5 +1,10 @@
-﻿$AgentsAvBin = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\Bin'))
-# Window-title keyword pairs for possible scareware/ransomware screens. Many false positives.
+﻿# RansomwareScarewareDetection.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Scans running process window titles for ransomware/scareware keyword patterns
+#              (e.g. "encrypted", "bitcoin", "decrypt", "pay to unlock"). High false-positive
+#              rate by design - alerts on 2+ keyword matches. Module for GEDR antivirus suite.
+
+$AgentsAvBin = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\Bin'))
 param([hashtable]$ModuleConfig)
 . (Join-Path $AgentsAvBin '_JobLog.ps1')
 

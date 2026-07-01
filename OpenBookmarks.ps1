@@ -1,9 +1,8 @@
 # OpenBookmarks.ps1
-# Opens all URLs from bookmarks.html in your default browser
-# so the browser can fetch and cache real favicons.
-#
-# Usage: Right-click > Run with PowerShell
-#        or from terminal: powershell -ExecutionPolicy Bypass -File OpenBookmarks.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Opens all URLs from a bookmarks.html file in the default browser so the
+#              browser can fetch and cache real favicons. Interactive batch/all mode.
+#              One-time utility, no persistence needed.
 
 $bookmarksFile = "$PSScriptRoot\bookmarks.html"
 

@@ -1,5 +1,10 @@
 # GShield.ps1
-# Author: Gorstak
+# Author: Gorstak (gorstak.eu)
+# Description: Multi-layered endpoint protection: deep file scanning with entropy/packer/IOC
+#              detection, AMSI integration, memory scanner for injected code, browser module
+#              guard (unloads unsigned DLLs), rootkit detection via HTTP event tracing,
+#              hash cache, and retaliation against phoning-home connections. Persistent via
+#              scheduled task.
 #Requires -RunAsAdministrator
 
 param(

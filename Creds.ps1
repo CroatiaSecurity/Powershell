@@ -1,5 +1,9 @@
-# Protect-LocalCredentials.ps1
-# Enhances protection for local and non-domain credentials by securing LSASS and managing credential caching
+# Creds.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Enhances local credential protection by enabling LSASS Protected Process
+#              Light (PPL), clearing cached credentials from Credential Manager, disabling
+#              credential caching, and enabling credential access auditing. One-time run,
+#              requires reboot for LSASS PPL to take effect.
 
 # Requires administrative privileges
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {

@@ -1,3 +1,9 @@
+# GPerf.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Applies Windows performance optimizations including CPU scheduling, memory
+#              management, network tuning (Nagle, TCP options, RSS), power plan, Explorer
+#              enhancements, graphics settings, and service debloating. One-time run utility,
+#              reboot recommended after applying.
 #Requires -RunAsAdministrator
 $Host.UI.RawUI.WindowTitle = "Performance Tweak Utility"
 

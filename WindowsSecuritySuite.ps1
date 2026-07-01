@@ -3,6 +3,7 @@
 <#
 .SYNOPSIS
     Windows Security Suite - Comprehensive system hardening, antivirus, and network protection
+    Author: Gorstak (gorstak.eu)
     
 .DESCRIPTION
     Merges antivirus, system hardening, browser network protection, password rotation, and anti-keylogger into a single automated solution.

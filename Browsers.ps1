@@ -1,3 +1,10 @@
+# Browsers.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Hardens Chromium-based browsers and Firefox by disabling WebRTC (IP leak
+#              prevention), disabling remote desktop plugins, and blocking Chrome Remote
+#              Desktop service/ports. One-time run utility.
+#Requires -RunAsAdministrator
+
 # Desired settings for WebRTC, remote desktop, and plugins
 $desiredSettings = @{
     "media_stream" = 2

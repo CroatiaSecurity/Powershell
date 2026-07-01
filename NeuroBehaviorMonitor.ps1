@@ -1,5 +1,10 @@
-﻿$AgentsAvBin = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\Bin'))
-# Focus/flash/cursor/screen heuristics (GEDR NeuroBehaviorMonitor). State persisted for standalone ticks.
+﻿# NeuroBehaviorMonitor.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Detects UI manipulation attacks including focus abuse, screen flash stimuli,
+#              topmost window abuse, cursor jitter automation, and color distortion/inversion.
+#              Uses heuristic scoring with persistent state. Module for GEDR antivirus suite.
+
+$AgentsAvBin = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\Bin'))
 param([hashtable]$ModuleConfig)
 . (Join-Path $AgentsAvBin '_JobLog.ps1')
 

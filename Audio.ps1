@@ -1,3 +1,9 @@
+# Audio.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Enables Acoustic Echo Cancellation (AEC) and Noise Suppression on all
+#              audio render devices via registry. One-time run, no persistence needed.
+#Requires -RunAsAdministrator
+
 # Check if running as Administrator
 $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {

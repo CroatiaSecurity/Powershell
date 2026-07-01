@@ -1,8 +1,98 @@
-﻿# KeyScrambler_Invisible_Fixed.ps1
-# → You see ONLY what you actually type
-# → Keyloggers see complete garbage
-# → Works on ALL keyboard layouts
-# → No more compile errors
+﻿# KeyScrambler.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Anti-keylogger that injects random fake keystrokes around real typing using
+#              a low-level keyboard hook. You see only what you type; keyloggers capture noise.
+#              Persistent via scheduled task at logon (runs hidden in background).
+#Requires -RunAsAdministrator
+
+param(
+    [switch]$Install,
+    [switch]$Uninstall
+)
+
+$Script:TaskName = "KeyScramblerProtection"
+$Script:InstallDir = "$env:ProgramData\KeyScrambler"
+$Script:ScriptName = "KeyScrambler.ps1"
+
+# ── Persistence ────────────────────────────────────────────────
+function Install-Persistence {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $dest -Force
+
+    $existing = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false }
+
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    $installed = $false
+
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger `
+            -Principal $principal -Settings $settings `
+            -Description "Anti-keylogger keystroke scrambler (Gorstak)" -Force | Out-Null
+        Write-Host "[OK] KeyScrambler persistence installed." -ForegroundColor Green
+        $installed = $true
+    } catch {
+        Write-Host "[WARN] Register-ScheduledTask failed: $_" -ForegroundColor Yellow
+    }
+
+    if (-not $installed) {
+        try {
+            $cmd = "schtasks /Create /TN `"$($Script:TaskName)`" /TR `"powershell.exe $pwshArgs`" /SC ONLOGON /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[OK] KeyScrambler persistence installed via schtasks fallback." -ForegroundColor Green
+            } else {
+                Write-Host "[ERROR] schtasks fallback failed: $result" -ForegroundColor Red
+            }
+        } catch {
+            Write-Host "[ERROR] schtasks exception: $_" -ForegroundColor Red
+        }
+    }
+    exit 0
+}
+
+function Uninstall-Persistence {
+    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false
+    }
+    $dest = Join-Path $Script:InstallDir $Script:ScriptName
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    Write-Host "[OK] KeyScrambler uninstalled." -ForegroundColor Green
+    exit 0
+}
+
+if ($Install)   { Install-Persistence }
+if ($Uninstall) { Uninstall-Persistence }
+
+# Auto-install on first run
+$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+if (-not $existingTask) {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if ($PSCommandPath -ne $dest) { Copy-Item -Path $PSCommandPath -Destination $dest -Force }
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "KeyScrambler (Gorstak)" -Force | Out-Null
+    } catch {
+        schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+    }
+}
+
+# ── KeyScrambler Core ──────────────────────────────────────────
 
 $Source = @"
 using System;

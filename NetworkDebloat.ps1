@@ -1,3 +1,10 @@
+# NetworkDebloat.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Disables unnecessary network adapter bindings (File/Printer Sharing, QoS,
+#              LLTD) on all active adapters and blocks LDAP/LDAPS ports via firewall.
+#              Installs as persistent scheduled task at logon.
+#Requires -RunAsAdministrator
+
 # Define paths and parameters
 $taskName = "NetworkDebloatStartup"
 $taskDescription = "Runs the NetworkDebloat script at user logon with system privileges."
@@ -27,15 +34,38 @@ if (-not (Test-Path $scriptPath) -or (Get-Item $scriptPath).LastWriteTime -lt (G
     Write-Output "Copied/Updated script to: $scriptPath"
 }
 
-# Register scheduled task as SYSTEM
+# Register scheduled task as SYSTEM (cmdlet first, schtasks fallback)
 $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if (-not $existingTask -and $isAdmin) {
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Description $taskDescription
-    Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction Stop
-    Write-Output "Scheduled task '$taskName' registered to run as SYSTEM."
+    $installed = $false
+    # Method 1: PowerShell cmdlets
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $taskDescription -Force | Out-Null
+        Write-Output "Scheduled task '$taskName' registered via Register-ScheduledTask."
+        $installed = $true
+    } catch {
+        Write-Output "Register-ScheduledTask failed: $_"
+    }
+
+    # Method 2: schtasks.exe fallback
+    if (-not $installed) {
+        try {
+            $schtasksArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
+            $cmd = "schtasks /Create /TN `"$taskName`" /TR `"powershell.exe $schtasksArgs`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Output "Scheduled task '$taskName' registered via schtasks.exe fallback."
+            } else {
+                Write-Output "schtasks fallback failed: $result"
+            }
+        } catch {
+            Write-Output "schtasks fallback exception: $_"
+        }
+    }
 } elseif (-not $isAdmin) {
     Write-Output "Skipping task registration: Admin privileges required"
 }
@@ -46,8 +76,7 @@ $componentsToDisable = @(
     "ms_msclient",   # Client for Microsoft Networks
     "ms_pacer",      # QoS Packet Scheduler
     "ms_lltdio",     # Link Layer Mapper I/O Driver
-    "ms_rspndr",     # Link Layer Responder
-    "ms_tcpip6"      # IPv6
+    "ms_rspndr"      # Link Layer Responder
 )
 
 # Disable on all active adapters

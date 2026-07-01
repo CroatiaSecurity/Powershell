@@ -1,4 +1,10 @@
-# ES.ps1 by Gorstak
+# ES.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Session security monitor that lists and terminates non-console RDP/remote
+#              sessions every 5 seconds to prevent unauthorized remote access. Installs
+#              as persistent scheduled task running at logon under SYSTEM.
+#Requires -RunAsAdministrator
+
 # PowerShell script to list and terminate non-console sessions every 5 seconds as a background job
 function Register-SystemLogonScript {
     param (
@@ -39,13 +45,30 @@ function Register-SystemLogonScript {
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
-    # Register the task
+    # Register the task (cmdlet first, schtasks fallback)
+    $installed = $false
     try {
         Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal
-        Write-Output "Scheduled task '$TaskName' created to run at user logon under SYSTEM."
+        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -ErrorAction Stop
+        Write-Output "Scheduled task '$TaskName' created via Register-ScheduledTask."
+        $installed = $true
     } catch {
-        Write-Output "Failed to register task: $_"
+        Write-Output "Register-ScheduledTask failed: $_"
+    }
+
+    # Fallback to schtasks.exe
+    if (-not $installed) {
+        try {
+            $schtasksCmd = "schtasks /Create /TN `"$TaskName`" /TR `"powershell.exe -ExecutionPolicy Bypass -File \`"$targetPath\`"`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
+            $result = cmd /c $schtasksCmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Output "Scheduled task '$TaskName' created via schtasks.exe fallback."
+            } else {
+                Write-Output "schtasks fallback failed: $result"
+            }
+        } catch {
+            Write-Output "schtasks fallback exception: $_"
+        }
     }
 }
 
