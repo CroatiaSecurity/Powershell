@@ -17,8 +17,8 @@ Write-Host "Creating GSecurity IPsec Policy (legacy format for secpol.msc)..."
 
 # Define the policy, filter lists, filters, and rules
 $policyName = "GSecurity"
-$ports = @(22, 23, 3389)
-$portNames = @("SSH", "Telnet", "RDP")
+$ports = @(21, 22, 23, 111, 135, 137, 138, 139, 445, 666, 1337, 1433, 2049, 3306, 3389, 4444, 5432, 5900, 5985, 5986, 31337)
+$portNames = @("FTP", "SSH", "Telnet", "RPCBind_111", "RPC_135", "NetBIOS_137", "NetBIOS_138", "NetBIOS_139", "SMB_445", "Trojan_666", "Backdoor_1337", "MSSQL_1433", "NFS_2049", "MySQL_3306", "RDP", "Backdoor_4444", "PostgreSQL_5432", "VNC_5900", "WinRM_5985", "WinRM_5986", "BackOrifice_31337")
 
 # Delete existing policy if it exists
 Write-Host "Checking for existing policy..."
