@@ -41,10 +41,6 @@ function Set-UACPolicy {
     # EnableVirtualization = 1: Virtualize file/registry writes for legacy apps
     Set-ItemProperty -Path $policyPath -Name 'EnableVirtualization' -Value 1 -Type DWord -Force
 
-    # ValidateAdminCodeSignatures = 0: Allow unsigned executables to elevate
-    # This setting has been disabled to permit unsigned/untrusted executables to elevate
-    Set-ItemProperty -Path $policyPath -Name 'ValidateAdminCodeSignatures' -Value 0 -Type DWord -Force
-
     # FilterAdministratorToken = 1: Apply UAC filtering to built-in Administrator too
     Set-ItemProperty -Path $policyPath -Name 'FilterAdministratorToken' -Value 1 -Type DWord -Force
 
@@ -136,8 +132,6 @@ function Set-UACBlockBlankPasswords {
     $policyPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
     Set-ItemProperty -Path $policyPath -Name 'ConsentPromptBehaviorAdmin' -Value 5 -Type DWord -Force -ErrorAction SilentlyContinue
 
-    # ValidateAdminCodeSignatures = 0: allow unsigned executables to elevate
-    Set-ItemProperty -Path $policyPath -Name 'ValidateAdminCodeSignatures' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 }
 
 switch ($Mode) {
@@ -255,7 +249,6 @@ function Uninstall {
     # Restore UAC to default (prompt for consent on secure desktop)
     $policyPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
     Set-ItemProperty -Path $policyPath -Name 'ConsentPromptBehaviorAdmin' -Value 5 -Type DWord -Force -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path $policyPath -Name 'ValidateAdminCodeSignatures' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
     Set-ItemProperty -Path $policyPath -Name 'FilterAdministratorToken' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 
     # Blank the password so user can log in after uninstall
