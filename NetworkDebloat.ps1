@@ -66,11 +66,11 @@ function Uninstall-Persistence {
 if ($Install) { Install-Persistence; return }
 if ($Uninstall) { Uninstall-Persistence; return }
 
-# Auto-install if not running from installed location
+# Auto-install if not running from installed location (schtasks fallback for debloated Windows)
 $installedPath = Join-Path $Script:InstallDir $Script:ScriptName
 if ($PSCommandPath -and $PSCommandPath -ne $installedPath) {
-    $existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
-    if (-not $existingTask) {
+    $taskExists = (schtasks /Query /TN $Script:TaskName 2>$null) -match $Script:TaskName
+    if (-not $taskExists) {
         Install-Persistence
         return
     }

@@ -67,9 +67,9 @@ function Uninstall-Persistence {
 if ($Install)   { Install-Persistence }
 if ($Uninstall) { Uninstall-Persistence }
 
-# Auto-install on first run
-$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
-if (-not $existingTask) { Install-Persistence }
+# Auto-install on first run (schtasks fallback for debloated Windows where WMI is broken)
+$taskExists = (schtasks /Query /TN $Script:TaskName 2>$null) -match $Script:TaskName
+if (-not $taskExists) { Install-Persistence }
 
 # -- Main Logic -------------------------------------------------
 $patterns = @("encrypted","bitcoin","decrypt","ransom","pay to unlock","your files have been","restore your files","microsoft support","pay fine")

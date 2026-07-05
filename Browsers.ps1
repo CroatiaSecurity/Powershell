@@ -63,10 +63,6 @@ function Uninstall-Persistence {
 if ($Install)   { Install-Persistence }
 if ($Uninstall) { Uninstall-Persistence }
 
-# Auto-install on first run
-$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
-if (-not $existingTask) { Install-Persistence }
-
 # Desired settings for WebRTC, remote desktop, and plugins
 $desiredSettings = @{
     "media_stream" = 2

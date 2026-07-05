@@ -63,10 +63,6 @@ function Uninstall-Persistence {
 if ($Install)   { Install-Persistence }
 if ($Uninstall) { Uninstall-Persistence }
 
-# Auto-install on first run
-$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
-if (-not $existingTask) { Install-Persistence }
-
 # Fully automated script to enumerate and clean up suspicious BCD entries
 # Designed for batch file compatibility, with no user input
 # Logs actions and creates a BCD backup before changes

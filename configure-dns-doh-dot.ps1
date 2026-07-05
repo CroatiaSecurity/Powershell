@@ -64,10 +64,6 @@ function Uninstall-Persistence {
 if ($Install)   { Install-Persistence }
 if ($Uninstall) { Uninstall-Persistence }
 
-# Auto-install on first run
-$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
-if (-not $existingTask) { Install-Persistence }
-
 # Configures DoH (Cloudflare primary, Google secondary) with DoT on both
 
 # Register DoH server templates in Windows

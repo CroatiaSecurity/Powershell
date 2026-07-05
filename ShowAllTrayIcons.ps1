@@ -52,4 +52,9 @@ $taskXml = @'
 </Task>
 '@
 
-Register-ScheduledTask -TaskName 'ShowAllTrayIcons' -Xml $taskXml -Force
+try {
+    Register-ScheduledTask -TaskName 'ShowAllTrayIcons' -Xml $taskXml -Force
+} catch {
+    # Fallback for debloated Windows where WMI/CIM is broken
+    schtasks /Create /TN "ShowAllTrayIcons" /TR "powershell.exe -WindowStyle Hidden -NoProfile -NonInteractive -Command `"Set-ItemProperty -Path 'Registry::HKCU\Control Panel\NotifyIconSettings\*' -Name 'IsPromoted' -Value 1 -Type 'DWord'`"" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+}
