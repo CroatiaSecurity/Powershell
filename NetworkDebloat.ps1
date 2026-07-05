@@ -2,73 +2,83 @@
 # Author: Gorstak (gorstak.eu)
 # Description: Disables unnecessary network adapter bindings (File/Printer Sharing, QoS,
 #              LLTD) on all active adapters and blocks LDAP/LDAPS ports via firewall.
-#              Installs as persistent scheduled task at logon.
+#              Installs as persistent scheduled task at startup.
 #Requires -RunAsAdministrator
 
-# Define paths and parameters
-$taskName = "NetworkDebloatStartup"
-$taskDescription = "Runs the NetworkDebloat script at user logon with system privileges."
-$scriptDir = "C:\Windows\Setup\Scripts"
-$scriptPath = "$scriptDir\NetworkDebloat.ps1"
+param([switch]$Install, [switch]$Uninstall)
 
-# Check admin privileges
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
-Write-Host "Running as admin: $isAdmin"
+$Script:TaskName = "NetworkDebloatSetup"
+$Script:InstallDir = "$env:ProgramData\NetworkDebloat"
+$Script:ScriptName = "NetworkDebloat.ps1"
 
-# Initial log with diagnostics
-Write-Output "Script initialized. Admin: $isAdmin, User: $env:USERNAME, SID: $([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)"
+function Install-Persistence {
+    # Create install directory
+    if (-not (Test-Path $Script:InstallDir)) {
+        New-Item -Path $Script:InstallDir -ItemType Directory -Force | Out-Null
+    }
 
-# Ensure execution policy allows script
-if ((Get-ExecutionPolicy) -eq "Restricted") {
-    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force -ErrorAction SilentlyContinue
-    Write-Output "Set execution policy to Bypass for current user."
-}
+    # Copy script to install location
+    $targetPath = Join-Path $Script:InstallDir $Script:ScriptName
+    Copy-Item -Path $PSCommandPath -Destination $targetPath -Force
 
-# Setup script directory and copy script
-if (-not (Test-Path $scriptDir)) {
-    New-Item -Path $scriptDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
-    Write-Output "Created script directory: $scriptDir"
-}
-if (-not (Test-Path $scriptPath) -or (Get-Item $scriptPath).LastWriteTime -lt (Get-Item $MyInvocation.MyCommand.Path).LastWriteTime) {
-    Copy-Item -Path $MyInvocation.MyCommand.Path -Destination $scriptPath -Force -ErrorAction Stop
-    Write-Output "Copied/Updated script to: $scriptPath"
-}
-
-# Register scheduled task as SYSTEM (cmdlet first, schtasks fallback)
-$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if (-not $existingTask -and $isAdmin) {
+    # Register scheduled task (cmdlet first, schtasks fallback)
     $installed = $false
-    # Method 1: PowerShell cmdlets
+    $pwshArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$targetPath`""
+
     try {
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
-        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtStartup
         $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $taskDescription -Force | Out-Null
-        Write-Output "Scheduled task '$taskName' registered via Register-ScheduledTask."
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+        Write-Host "Scheduled task '$($Script:TaskName)' registered via Register-ScheduledTask."
         $installed = $true
     } catch {
-        Write-Output "Register-ScheduledTask failed: $_"
+        Write-Host "Register-ScheduledTask failed: $_"
     }
 
-    # Method 2: schtasks.exe fallback
     if (-not $installed) {
         try {
-            $schtasksArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
-            $cmd = "schtasks /Create /TN `"$taskName`" /TR `"powershell.exe $schtasksArgs`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
+            $cmd = "schtasks /Create /TN `"$($Script:TaskName)`" /TR `"powershell.exe $pwshArgs`" /SC ONSTART /RU SYSTEM /RL HIGHEST /F"
             $result = cmd /c $cmd 2>&1
             if ($LASTEXITCODE -eq 0) {
-                Write-Output "Scheduled task '$taskName' registered via schtasks.exe fallback."
+                Write-Host "Scheduled task '$($Script:TaskName)' registered via schtasks.exe fallback."
             } else {
-                Write-Output "schtasks fallback failed: $result"
+                Write-Host "schtasks fallback failed: $result"
             }
         } catch {
-            Write-Output "schtasks fallback exception: $_"
+            Write-Host "schtasks fallback exception: $_"
         }
     }
-} elseif (-not $isAdmin) {
-    Write-Output "Skipping task registration: Admin privileges required"
+
+    Write-Host "Persistence installed to: $targetPath"
 }
+
+function Uninstall-Persistence {
+    Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    if (Test-Path $Script:InstallDir) {
+        Remove-Item -Path $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "Persistence removed for '$($Script:TaskName)'."
+}
+
+if ($Install) { Install-Persistence; return }
+if ($Uninstall) { Uninstall-Persistence; return }
+
+# Auto-install if not running from installed location
+$installedPath = Join-Path $Script:InstallDir $Script:ScriptName
+if ($PSCommandPath -and $PSCommandPath -ne $installedPath) {
+    $existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if (-not $existingTask) {
+        Install-Persistence
+        return
+    }
+}
+
+# ==============================
+# Main Logic - Network Debloat
+# ==============================
 
 # List of unwanted bindings
 $componentsToDisable = @(

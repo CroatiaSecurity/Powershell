@@ -4,52 +4,109 @@
     Author: Gorstak (gorstak.eu)
 .DESCRIPTION
     Strips bloatware, telemetry apps, and applies registry tweaks to a Windows ISO using
-    wimlib and an NTLite XML preset. Requires -IsoPath and -XmlPath parameters.
-    Supports -KeepStore, -KeepXbox, -KeepDefender, -KeepEdge, -KeepUpdates switches.
+    wimlib and an NTLite XML preset. Auto-detects .iso and .xml files in script directory
+    or Desktop. Strips everything by default with no keep switches.
     One-time utility - produces a debloated ISO file.
 #>
 
 #Requires -RunAsAdministrator
 
-param (
-    [string]$IsoPath,
-    [string]$XmlPath,
-    [switch]$KeepStore,
-    [switch]$KeepXbox,
-    [switch]$KeepDefender,
-    [switch]$KeepEdge,
-    [switch]$KeepUpdates
-)
+param([switch]$Install, [switch]$Uninstall)
 
-# Auto-detect ISO and XML if not provided
-if (-not $IsoPath) {
-    $IsoPath = Get-ChildItem "$PSScriptRoot\*.iso" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-    if (-not $IsoPath) {
-        $IsoPath = Get-ChildItem "$env:USERPROFILE\Desktop\*.iso" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+$Script:TaskName = "StripperDebloat"
+$Script:InstallDir = "$env:ProgramData\Stripper"
+$Script:ScriptName = "Stripper.ps1"
+
+function Install-Persistence {
+    # Create install directory
+    if (-not (Test-Path $Script:InstallDir)) {
+        New-Item -Path $Script:InstallDir -ItemType Directory -Force | Out-Null
+    }
+
+    # Copy script to install location
+    $targetPath = Join-Path $Script:InstallDir $Script:ScriptName
+    Copy-Item -Path $PSCommandPath -Destination $targetPath -Force
+
+    # Register scheduled task (cmdlet first, schtasks fallback)
+    $installed = $false
+    $pwshArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$targetPath`""
+
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtStartup
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+        Write-Host "Scheduled task '$($Script:TaskName)' registered via Register-ScheduledTask."
+        $installed = $true
+    } catch {
+        Write-Host "Register-ScheduledTask failed: $_"
+    }
+
+    if (-not $installed) {
+        try {
+            $cmd = "schtasks /Create /TN `"$($Script:TaskName)`" /TR `"powershell.exe $pwshArgs`" /SC ONSTART /RU SYSTEM /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Scheduled task '$($Script:TaskName)' registered via schtasks.exe fallback."
+            } else {
+                Write-Host "schtasks fallback failed: $result"
+            }
+        } catch {
+            Write-Host "schtasks fallback exception: $_"
+        }
+    }
+
+    Write-Host "Persistence installed to: $targetPath"
+}
+
+function Uninstall-Persistence {
+    Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    if (Test-Path $Script:InstallDir) {
+        Remove-Item -Path $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "Persistence removed for '$($Script:TaskName)'."
+}
+
+if ($Install) { Install-Persistence; return }
+if ($Uninstall) { Uninstall-Persistence; return }
+
+# Auto-install if not running from installed location
+$installedPath = Join-Path $Script:InstallDir $Script:ScriptName
+if ($PSCommandPath -and $PSCommandPath -ne $installedPath) {
+    $existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if (-not $existingTask) {
+        Install-Persistence
+        return
     }
 }
+
+# ==============================
+# Main Logic - ISO Debloater
+# ==============================
+
+# Auto-detect ISO and XML
+$IsoPath = Get-ChildItem "$PSScriptRoot\*.iso" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+if (-not $IsoPath) {
+    $IsoPath = Get-ChildItem "$env:USERPROFILE\Desktop\*.iso" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+}
+$XmlPath = Get-ChildItem "$PSScriptRoot\*.xml" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
 if (-not $XmlPath) {
-    $XmlPath = Get-ChildItem "$PSScriptRoot\*.xml" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-    if (-not $XmlPath) {
-        $XmlPath = Get-ChildItem "$env:USERPROFILE\Desktop\*.xml" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-    }
+    $XmlPath = Get-ChildItem "$env:USERPROFILE\Desktop\*.xml" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
 }
 
 if (-not $IsoPath -or -not (Test-Path $IsoPath)) {
-    Write-Host "ERROR: No ISO file found. Provide -IsoPath or place a .iso in the script directory." -ForegroundColor Red
+    Write-Host "ERROR: No ISO file found. Place a .iso in the script directory or Desktop." -ForegroundColor Red
     exit 1
 }
 if (-not $XmlPath -or -not (Test-Path $XmlPath)) {
-    Write-Host "ERROR: No XML preset found. Provide -XmlPath or place a .xml in the script directory." -ForegroundColor Red
+    Write-Host "ERROR: No XML preset found. Place a .xml in the script directory or Desktop." -ForegroundColor Red
     exit 1
 }
 
 Write-Host "Using ISO: $IsoPath" -ForegroundColor Green
 Write-Host "Using preset: $XmlPath" -ForegroundColor Green
-
-# ==============================
-# 3. (Rest of the script - unchanged, just slightly cleaned)
-# ==============================
 
 function Get-Wimlib {
     $zip = "$env:TEMP\wimlib.zip"
@@ -116,17 +173,10 @@ if ($wimFile -match "\.esd$") {
     $wimFile = "$extractDir\sources\install.wim"
 }
 
-# Parse XML
+# Parse XML - strip everything (no keep switches)
 Write-Host "Parsing NTLite preset..." -ForegroundColor Cyan
 [xml]$xml = Get-Content $XmlPath -Raw -Encoding UTF8
 $removeList = $xml.Preset.RemoveComponents.c | ForEach-Object { ($_.InnerText -split " ")[0] }
-
-# Apply keep switches
-if ($KeepStore)     { $removeList = $removeList | Where-Object { $_ -notmatch "store|appinstaller|msix" } }
-if ($KeepXbox)      { $removeList = $removeList | Where-Object { $_ -notmatch "xbox" } }
-if ($KeepDefender)  { $removeList = $removeList | Where-Object { $_ -notmatch "defender|sechealth|securitycenter" } }
-if ($KeepEdge)      { $removeList = $removeList | Where-Object { $_ -notmatch "edge|webview" } }
-if ($KeepUpdates)   { $removeList = $removeList | Where-Object { $_ -notmatch "update|wu|waas|sih|medic" } }
 
 # Mount WIM
 Write-Host "Mounting WIM image..." -ForegroundColor Cyan

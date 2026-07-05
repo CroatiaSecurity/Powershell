@@ -8,11 +8,13 @@
 #Requires -RunAsAdministrator
 
 param(
-    [string[]]$Path,
-    [int]$IntervalMinutes = 60,
-    [int]$RootkitPollSeconds = 20,
-    [int]$RootkitLookbackSeconds = 60
+    [switch]$Install,
+    [switch]$Uninstall
 )
+
+$Script:TaskName = "GShieldProtection"
+$Script:InstallDir = "$env:ProgramData\Antivirus"
+$Script:ScriptName = "GShield.ps1"
 
 # ==================== CONFIG ====================
 $InstallDir    = "$env:ProgramData\Antivirus"
@@ -21,6 +23,10 @@ $QuarDir       = "$InstallDir\quarantine"
 $LogFile       = "$LogDir\scanner.log"
 $HashCacheFile = "$InstallDir\cache.csv"
 $PwRotatorDir  = "C:\ProgramData\PasswordRotator"
+
+$IntervalMinutes = 60
+$RootkitPollSeconds = 20
+$RootkitLookbackSeconds = 60
 
 $Ext = @('*.exe','*.dll','*.ocx','*.winmd','*.ps1','*.vbs','*.js','*.bat','*.cmd','*.scr','*.msi')
 
@@ -933,12 +939,53 @@ function Start-KeyScrambler {
 
 # ==================== PERSISTENCE ====================
 function Install-Persistence {
-    $taskName  = "MicrosoftSysCache"
-    $scriptPath = $PSCommandPath
-    schtasks.exe /Delete /TN $taskName /F 2>$null
-    $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
-    schtasks.exe /Create /TN $taskName /TR $cmd /SC ONLOGON /RL HIGHEST /F 2>$null | Out-Null
-    Write-Log "Persistence installed as $taskName"
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $dest -Force
+
+    $existing = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false }
+
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    $installed = $false
+
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Multi-layered endpoint protection (Gorstak)" -Force | Out-Null
+        Write-Host "[OK] Persistence installed." -ForegroundColor Green
+        $installed = $true
+    } catch {}
+
+    if (-not $installed) {
+        try {
+            schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+            Write-Host "[OK] Persistence installed via schtasks." -ForegroundColor Green
+            $installed = $true
+        } catch {}
+    }
+
+    if (-not $installed) { Write-Host "[ERROR] Could not install persistence." -ForegroundColor Red }
+    exit 0
+}
+
+function Uninstall-Persistence {
+    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    } else {
+        schtasks /Delete /TN "$($Script:TaskName)" /F 2>&1 | Out-Null
+    }
+    # Also clean old task name
+    schtasks /Delete /TN "MicrosoftSysCache" /F 2>&1 | Out-Null
+    $dest = Join-Path $Script:InstallDir $Script:ScriptName
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    Write-Host "[OK] GShield uninstalled." -ForegroundColor Green
+    exit 0
 }
 
 # ==================== MAIN ====================
@@ -947,8 +994,15 @@ try {
     if (!(Test-Path $QuarDir)) { New-Item $QuarDir -ItemType Directory -Force | Out-Null }
 
     Write-Log "GShield v3.0 starting - PID: $PID"
+
+    if ($Install)   { Install-Persistence }
+    if ($Uninstall) { Uninstall-Persistence }
+
+    # Auto-install on first run
+    $existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if (-not $existingTask) { Install-Persistence }
+
     Invoke-SelfProtection
-    Install-Persistence
     Install-PasswordRotator
     Load-Cache
     Start-ContinuousModuleMonitor
@@ -957,13 +1011,7 @@ try {
     Get-EventSubscriber -SourceIdentifier "ProcGuard" -EA 0 | Unregister-Event -Force
 
     function Get-ScanTargets {
-        if ($Path -and $Path.Count -gt 0) { return $Path }
         Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Root -and (Test-Path $_.Root) } | Select-Object -ExpandProperty Root
-    }
-
-    if ($IntervalMinutes -le 0) {
-        Get-ScanTargets | ForEach-Object { Invoke-Scan $_ }
-        exit
     }
 
     Write-Log "Real-time protection | Memory Scanner | Continuous Module Monitor | KeyScrambler | RootkitKiller | Retaliate | PasswordRotator - all active"
@@ -980,7 +1028,6 @@ try {
         }
     } | Out-Null
 
-    $cycle = 0
     # Only enter blocking scan loop if running from installed/scheduled location
     $isScheduledRun = $PSCommandPath -and ($PSCommandPath.StartsWith($InstallDir, [System.StringComparison]::OrdinalIgnoreCase) -or $PSCommandPath.StartsWith("C:\Windows\Setup\Scripts", [System.StringComparison]::OrdinalIgnoreCase))
     if (-not $isScheduledRun) {
@@ -990,14 +1037,15 @@ try {
         Save-Cache
         Write-Log "Installation and initial scan complete. Persistent monitor will run via scheduled task."
     } else {
+        $cycle = 0
         while ($true) {
             $cycle++
             Write-Log "Cycle $cycle - scanning all drives..."
             Get-ScanTargets | ForEach-Object { Invoke-Scan $_ }
 
             Invoke-MemoryScan
-            Invoke-RootkitScan             # ETW HTTP rootkit check
-            Invoke-RetaliateMonitorCycle   # browser phone-home retaliation
+            Invoke-RootkitScan
+            Invoke-RetaliateMonitorCycle
 
             Save-Cache
             Start-Sleep -Seconds ($IntervalMinutes * 60)

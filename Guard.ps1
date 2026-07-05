@@ -5,21 +5,87 @@
 #              and monitors for new DLL creation via FileSystemWatcher. Persistent via
 #              scheduled task with cmdlet-first, schtasks fallback.
 #Requires -RunAsAdministrator
- 
-# Define paths and parameters
-$taskName = "GuardStartup"
-$taskDescription = "Runs the Guard script at user logon with admin privileges."
-$scriptDir = "C:\Windows\Setup\Scripts\Bin"
-$scriptPath = "$scriptDir\Guard.ps1"
+
+param([switch]$Install, [switch]$Uninstall)
+
+$Script:TaskName = "GuardProtection"
+$Script:InstallDir = "$env:ProgramData\Guard"
+$Script:ScriptName = "Guard.ps1"
+
+function Install-Persistence {
+    # Create install directory
+    if (-not (Test-Path $Script:InstallDir)) {
+        New-Item -Path $Script:InstallDir -ItemType Directory -Force | Out-Null
+    }
+
+    # Copy script to install location
+    $targetPath = Join-Path $Script:InstallDir $Script:ScriptName
+    Copy-Item -Path $PSCommandPath -Destination $targetPath -Force
+
+    # Register scheduled task (cmdlet first, schtasks fallback)
+    $installed = $false
+    $pwshArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$targetPath`""
+
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+        Write-Host "Scheduled task '$($Script:TaskName)' registered via Register-ScheduledTask."
+        $installed = $true
+    } catch {
+        Write-Host "Register-ScheduledTask failed: $_"
+    }
+
+    if (-not $installed) {
+        try {
+            $cmd = "schtasks /Create /TN `"$($Script:TaskName)`" /TR `"powershell.exe $pwshArgs`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Scheduled task '$($Script:TaskName)' registered via schtasks.exe fallback."
+            } else {
+                Write-Host "schtasks fallback failed: $result"
+            }
+        } catch {
+            Write-Host "schtasks fallback exception: $_"
+        }
+    }
+
+    Write-Host "Persistence installed to: $targetPath"
+}
+
+function Uninstall-Persistence {
+    Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    if (Test-Path $Script:InstallDir) {
+        Remove-Item -Path $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "Persistence removed for '$($Script:TaskName)'."
+}
+
+if ($Install) { Install-Persistence; return }
+if ($Uninstall) { Uninstall-Persistence; return }
+
+# Auto-install if not running from installed location
+$installedPath = Join-Path $Script:InstallDir $Script:ScriptName
+if ($PSCommandPath -and $PSCommandPath -ne $installedPath) {
+    $existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if (-not $existingTask) {
+        Install-Persistence
+        return
+    }
+}
+
+# ==============================
+# Main Logic - DLL Integrity Monitor
+# ==============================
+
 $quarantineFolder = "C:\Quarantine"
 $logFile = "$quarantineFolder\antivirus_log.txt"
 $localDatabase = "$quarantineFolder\scanned_files.txt"
 $scannedFiles = @{} # Initialize empty hash table
- 
-# Check admin privileges
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
-Write-Host "Running as admin: $isAdmin"
- 
+
 # Logging Function with Rotation
 function Write-Log {
     param ([string]$message)
@@ -37,65 +103,13 @@ function Write-Log {
     }
     $logEntry | Out-File -FilePath $logFile -Append -Encoding UTF8 -ErrorAction Stop
 }
- 
-# Initial log with diagnostics
-Write-Log "Script initialized. Admin: $isAdmin, User: $env:USERNAME, SID: $([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)"
- 
-# Ensure execution policy allows script
-if ((Get-ExecutionPolicy) -eq "Restricted") {
-    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force -ErrorAction SilentlyContinue
-    Write-Log "Set execution policy to Bypass for current user."
-}
- 
-# Setup script directory and copy script
-if (-not (Test-Path $scriptDir)) {
-    New-Item -Path $scriptDir -ItemType Directory -Force -ErrorAction Stop | Out-Null
-    Write-Log "Created script directory: $scriptDir"
-}
-if (-not (Test-Path $scriptPath) -or (Get-Item $scriptPath).LastWriteTime -lt (Get-Item $MyInvocation.MyCommand.Path).LastWriteTime) {
-    Copy-Item -Path $MyInvocation.MyCommand.Path -Destination $scriptPath -Force -ErrorAction Stop
-    Write-Log "Copied/Updated script to: $scriptPath"
-}
 
-# Register scheduled task (cmdlet first, schtasks fallback)
-$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-if (-not $existingTask -and $isAdmin) {
-    $pwshArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
-    $installed = $false
+Write-Log "Script initialized. User: $env:USERNAME, SID: $([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)"
 
-    # Method 1: PowerShell cmdlets
-    try {
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
-        $trigger = New-ScheduledTaskTrigger -AtLogOn
-        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $taskDescription -Force | Out-Null
-        Write-Log "Persistence installed via Register-ScheduledTask."
-        $installed = $true
-    } catch {
-        Write-Log "Register-ScheduledTask failed: $_"
-    }
-
-    # Method 2: schtasks.exe fallback
-    if (-not $installed) {
-        try {
-            $cmd = "schtasks /Create /TN `"$taskName`" /TR `"powershell.exe $pwshArgs`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
-            $result = cmd /c $cmd 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Log "Persistence installed via schtasks.exe fallback."
-            } else {
-                Write-Log "schtasks fallback failed: $result"
-            }
-        } catch {
-            Write-Log "schtasks fallback exception: $_"
-        }
-    }
-}
- 
 # Load or Reset Scanned Files Database
 if (Test-Path $localDatabase) {
     try {
-        $scannedFiles.Clear() # Reset hash table before loading
+        $scannedFiles.Clear()
         $lines = Get-Content $localDatabase -ErrorAction Stop
         foreach ($line in $lines) {
             if ($line -match "^([0-9a-f]{64}),(true|false)$") {
@@ -105,14 +119,17 @@ if (Test-Path $localDatabase) {
         Write-Log "Loaded $($scannedFiles.Count) scanned file entries from database."
     } catch {
         Write-Log "Failed to load database: $($_.Exception.Message)"
-        $scannedFiles.Clear() # Reset on failure
+        $scannedFiles.Clear()
     }
 } else {
-    $scannedFiles.Clear() # Ensure reset if no database
+    $scannedFiles.Clear()
+    if (-not (Test-Path $quarantineFolder)) {
+        New-Item -Path $quarantineFolder -ItemType Directory -Force -ErrorAction Stop | Out-Null
+    }
     New-Item -Path $localDatabase -ItemType File -Force -ErrorAction Stop | Out-Null
     Write-Log "Created new database: $localDatabase"
 }
- 
+
 # Take Ownership and Modify Permissions (Aggressive)
 function Set-FileOwnershipAndPermissions {
     param ([string]$filePath)
@@ -127,7 +144,7 @@ function Set-FileOwnershipAndPermissions {
         return $false
     }
 }
- 
+
 # Calculate File Hash and Signature
 function Calculate-FileHash {
     param ([string]$filePath)
@@ -145,7 +162,7 @@ function Calculate-FileHash {
         return $null
     }
 }
- 
+
 # Quarantine File (Crash-Proof)
 function Quarantine-File {
     param ([string]$filePath)
@@ -157,7 +174,7 @@ function Quarantine-File {
         Write-Log "Failed to quarantine ${filePath}: $($_.Exception.Message)"
     }
 }
- 
+
 # Stop Processes Using DLL (Aggressive)
 function Stop-ProcessUsingDLL {
     param ([string]$filePath)
@@ -180,12 +197,11 @@ function Stop-ProcessUsingDLL {
         }
     }
 }
- 
+
 # Remove Unsigned DLLs (Target Specific Folders)
 function Remove-UnsignedDLLs {
     Write-Log "Starting unsigned DLL scan in Program Files and AppData folders."
     
-    # Define target folders
     $targetFolders = @(
         "C:\Program Files",
         "C:\Program Files (x86)",
@@ -211,7 +227,7 @@ function Remove-UnsignedDLLs {
                                     }
                                 }
                             } else {
-                                $isValid = $fileHash.Status -eq "Valid" # Only "Valid" is safe
+                                $isValid = $fileHash.Status -eq "Valid"
                                 $scannedFiles[$fileHash.Hash] = $isValid
                                 "$($fileHash.Hash),$isValid" | Out-File -FilePath $localDatabase -Append -Encoding UTF8 -ErrorAction Stop
                                 Write-Log "Scanned new file: $($dll.FullName) (Valid: $isValid)"
@@ -235,7 +251,7 @@ function Remove-UnsignedDLLs {
         }
     }
 }
- 
+
 # File System Watcher (Throttled and Crash-Proof)
 $targetFolders = @(
     "C:\Program Files",
@@ -253,7 +269,7 @@ foreach ($monitorPath in $targetFolders) {
             $fileWatcher.IncludeSubdirectories = $true
             $fileWatcher.EnableRaisingEvents = $true
             $fileWatcher.NotifyFilter = [System.IO.NotifyFilters]::FileName -bor [System.IO.NotifyFilters]::LastWrite
- 
+
             $action = {
                 param($sender, $e)
                 try {
@@ -282,13 +298,13 @@ foreach ($monitorPath in $targetFolders) {
                                 }
                             }
                         }
-                        Start-Sleep -Milliseconds 500 # Throttle to prevent event flood
+                        Start-Sleep -Milliseconds 500
                     }
                 } catch {
                     Write-Log "Watcher error for $($e.FullPath): $($_.Exception.Message)"
                 }
             }
- 
+
             Register-ObjectEvent -InputObject $fileWatcher -EventName Created -Action $action -ErrorAction Stop
             Register-ObjectEvent -InputObject $fileWatcher -EventName Changed -Action $action -ErrorAction Stop
             Write-Log "FileSystemWatcher set up for $monitorPath"
@@ -299,20 +315,16 @@ foreach ($monitorPath in $targetFolders) {
         Write-Log "Monitor path not found: $monitorPath"
     }
 }
- 
+
 # Initial scan
 Remove-UnsignedDLLs
 Write-Log "Initial scan completed. Monitoring started."
- 
-# Only enter the blocking loop if running from the installed location (scheduled task)
-if ($PSCommandPath -and $PSCommandPath.StartsWith($scriptDir, [System.StringComparison]::OrdinalIgnoreCase)) {
-    Write-Host "Antivirus running. Press [Ctrl] + [C] to stop."
-    try {
-        while ($true) { Start-Sleep -Seconds 10 }
-    } catch {
-        Write-Log "Main loop crashed: $($_.Exception.Message)"
-        Write-Host "Script crashed. Check $logFile for details."
-    }
-} else {
-    Write-Log "Installation and initial scan complete. Monitor will run via scheduled task."
+
+# Enter blocking loop (running from installed location via scheduled task)
+Write-Host "Guard running. Press [Ctrl] + [C] to stop."
+try {
+    while ($true) { Start-Sleep -Seconds 10 }
+} catch {
+    Write-Log "Main loop crashed: $($_.Exception.Message)"
+    Write-Host "Script crashed. Check $logFile for details."
 }

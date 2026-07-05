@@ -5,75 +5,80 @@
 #              as persistent scheduled task running at logon under SYSTEM.
 #Requires -RunAsAdministrator
 
-# PowerShell script to list and terminate non-console sessions every 5 seconds as a background job
-function Register-SystemLogonScript {
-    param (
-        [string]$TaskName = "RunESAtLogon"
-    )
+param([switch]$Install, [switch]$Uninstall)
 
-    # Define paths
-    $scriptSource = $MyInvocation.MyCommand.Path
-    if (-not $scriptSource) {
-        # Fallback to determine script path
-        $scriptSource = $PSCommandPath
-        if (-not $scriptSource) {
-            Write-Output "Error: Could not determine script path."
-            return
-        }
+$Script:TaskName = "ESSessionMonitor"
+$Script:InstallDir = "$env:ProgramData\ES"
+$Script:ScriptName = "ES.ps1"
+
+function Install-Persistence {
+    # Create install directory
+    if (-not (Test-Path $Script:InstallDir)) {
+        New-Item -Path $Script:InstallDir -ItemType Directory -Force | Out-Null
     }
 
-    $targetFolder = "C:\Windows\Setup\Scripts\Bin"
-    $targetPath = Join-Path $targetFolder (Split-Path $scriptSource -Leaf)
+    # Copy script to install location
+    $targetPath = Join-Path $Script:InstallDir $Script:ScriptName
+    Copy-Item -Path $PSCommandPath -Destination $targetPath -Force
 
-    # Create required folders
-    if (-not (Test-Path $targetFolder)) {
-        New-Item -Path $targetFolder -ItemType Directory -Force | Out-Null
-        Write-Output "Created folder: $targetFolder"
-    }
-
-    # Copy the script
-    try {
-        Copy-Item -Path $scriptSource -Destination $targetPath -Force -ErrorAction Stop
-        Write-Output "Copied script to: $targetPath"
-    } catch {
-        Write-Output "Failed to copy script: $_"
-        return
-    }
-
-    # Define the scheduled task action and trigger
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$targetPath`""
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-
-    # Register the task (cmdlet first, schtasks fallback)
+    # Register scheduled task (cmdlet first, schtasks fallback)
     $installed = $false
+    $pwshArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$targetPath`""
+
     try {
-        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -ErrorAction Stop
-        Write-Output "Scheduled task '$TaskName' created via Register-ScheduledTask."
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+        Write-Host "Scheduled task '$($Script:TaskName)' registered via Register-ScheduledTask."
         $installed = $true
     } catch {
-        Write-Output "Register-ScheduledTask failed: $_"
+        Write-Host "Register-ScheduledTask failed: $_"
     }
 
-    # Fallback to schtasks.exe
     if (-not $installed) {
         try {
-            $schtasksCmd = "schtasks /Create /TN `"$TaskName`" /TR `"powershell.exe -ExecutionPolicy Bypass -File \`"$targetPath\`"`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
-            $result = cmd /c $schtasksCmd 2>&1
+            $cmd = "schtasks /Create /TN `"$($Script:TaskName)`" /TR `"powershell.exe $pwshArgs`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
             if ($LASTEXITCODE -eq 0) {
-                Write-Output "Scheduled task '$TaskName' created via schtasks.exe fallback."
+                Write-Host "Scheduled task '$($Script:TaskName)' registered via schtasks.exe fallback."
             } else {
-                Write-Output "schtasks fallback failed: $result"
+                Write-Host "schtasks fallback failed: $result"
             }
         } catch {
-            Write-Output "schtasks fallback exception: $_"
+            Write-Host "schtasks fallback exception: $_"
         }
+    }
+
+    Write-Host "Persistence installed to: $targetPath"
+}
+
+function Uninstall-Persistence {
+    Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    if (Test-Path $Script:InstallDir) {
+        Remove-Item -Path $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "Persistence removed for '$($Script:TaskName)'."
+}
+
+if ($Install) { Install-Persistence; return }
+if ($Uninstall) { Uninstall-Persistence; return }
+
+# Auto-install if not running from installed location
+$installedPath = Join-Path $Script:InstallDir $Script:ScriptName
+if ($PSCommandPath -and $PSCommandPath -ne $installedPath) {
+    $existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if (-not $existingTask) {
+        Install-Persistence
+        return
     }
 }
 
-# Run the function
-Register-SystemLogonScript
+# ==============================
+# Main Logic - Session Monitoring
+# ==============================
 
 # Define log file path
 $logFile = "$env:TEMP\SessionTerminator.log"

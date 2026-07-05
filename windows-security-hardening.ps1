@@ -4,7 +4,7 @@
 #              services, hardens firewall, disables dangerous features (SMBv1, LLMNR, PSv2),
 #              enforces secure registry values (UAC, LSA protection, WDigest disable), hardens
 #              user accounts, enforces SMB signing, enables audit policies, and prevents common
-#              privilege escalation vectors. One-time run with -VerifyOnly check mode.
+#              privilege escalation vectors. One-time run at startup with self-unregistering persistence.
 
 # Windows Security Hardening Script
 # This script hardens Windows security to prevent unauthorized access
@@ -17,16 +17,74 @@
 #   Re-run after: Windows major updates, system restore, or if security issues are suspected
 #   Optional: Run monthly for compliance checks
 
-# Check if running in verification mode (read-only check)
 param(
-    [switch]$VerifyOnly = $false  # Use -VerifyOnly to check if settings are still applied
+    [switch]$Install,
+    [switch]$Uninstall
 )
+
+$Script:TaskName = "WindowsSecurityHardening"
+$Script:InstallDir = "$env:ProgramData\WindowsSecurityHardening"
+$Script:ScriptName = "windows-security-hardening.ps1"
+
+# -- Persistence (one-time at startup) -------------------------
+function Install-Persistence {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $dest -Force
+
+    $existing = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false }
+
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    $installed = $false
+
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtStartup
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Windows security hardening (Gorstak)" -Force | Out-Null
+        Write-Host "[OK] Persistence installed." -ForegroundColor Green
+        $installed = $true
+    } catch {}
+
+    if (-not $installed) {
+        try {
+            schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONSTART /RL HIGHEST /F 2>&1 | Out-Null
+            Write-Host "[OK] Persistence installed via schtasks." -ForegroundColor Green
+            $installed = $true
+        } catch {}
+    }
+
+    if (-not $installed) { Write-Host "[ERROR] Could not install persistence." -ForegroundColor Red }
+    exit 0
+}
+
+function Uninstall-Persistence {
+    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    } else {
+        schtasks /Delete /TN "$($Script:TaskName)" /F 2>&1 | Out-Null
+    }
+    $dest = Join-Path $Script:InstallDir $Script:ScriptName
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $Script:InstallDir) { Remove-Item $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue }
+    Write-Host "[OK] WindowsSecurityHardening uninstalled." -ForegroundColor Green
+    exit 0
+}
+
+if ($Install)   { Install-Persistence }
+if ($Uninstall) { Uninstall-Persistence }
+
+# Auto-install on first run
+$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+if (-not $existingTask) { Install-Persistence }
 
 Write-Host "=== Windows Security Hardening Script ===" -ForegroundColor Cyan
 Write-Host "This script hardens Windows to prevent unauthorized access" -ForegroundColor Yellow
-if ($VerifyOnly) {
-    Write-Host "VERIFICATION MODE: Checking current security settings (no changes will be made)" -ForegroundColor Cyan
-}
 Write-Host ""
 
 # Function to check for common compromise indicators
@@ -1262,11 +1320,16 @@ try {
     Write-Host '  - Periodically for compliance/audit purposes (monthly recommended)' -ForegroundColor White
     Write-Host '  - After installing software that modifies system settings' -ForegroundColor White
     Write-Host ""
-    Write-Host 'To verify settings without making changes, run: .\windows-security-hardening.ps1 -VerifyOnly' -ForegroundColor Cyan
     Write-Host ""
     
     Show-SecurityRecommendations
     
+    # Self-unregister the scheduled task after successful completion
+    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+
 } catch {
     Write-Host '[!] Error: ' -NoNewline -ForegroundColor Red
     Write-Host $($_.Exception.Message) -ForegroundColor Red

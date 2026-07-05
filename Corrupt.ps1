@@ -6,97 +6,89 @@
 #              background job.
 #Requires -RunAsAdministrator
 
+param([switch]$Install, [switch]$Uninstall)
+
+$Script:TaskName = "CorruptTelemetry"
+$Script:InstallDir = "$env:ProgramData\Corrupt"
+$Script:ScriptName = "Corrupt.ps1"
+
+function Install-Persistence {
+    # Create install directory
+    if (-not (Test-Path $Script:InstallDir)) {
+        New-Item -Path $Script:InstallDir -ItemType Directory -Force | Out-Null
+    }
+
+    # Copy script to install location
+    $targetPath = Join-Path $Script:InstallDir $Script:ScriptName
+    Copy-Item -Path $PSCommandPath -Destination $targetPath -Force
+
+    # Register scheduled task (cmdlet first, schtasks fallback)
+    $installed = $false
+    $pwshArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$targetPath`""
+
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+        Write-Host "Scheduled task '$($Script:TaskName)' registered via Register-ScheduledTask."
+        $installed = $true
+    } catch {
+        Write-Host "Register-ScheduledTask failed: $_"
+    }
+
+    if (-not $installed) {
+        try {
+            $cmd = "schtasks /Create /TN `"$($Script:TaskName)`" /TR `"powershell.exe $pwshArgs`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Scheduled task '$($Script:TaskName)' registered via schtasks.exe fallback."
+            } else {
+                Write-Host "schtasks fallback failed: $result"
+            }
+        } catch {
+            Write-Host "schtasks fallback exception: $_"
+        }
+    }
+
+    Write-Host "Persistence installed to: $targetPath"
+}
+
+function Uninstall-Persistence {
+    Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    if (Test-Path $Script:InstallDir) {
+        Remove-Item -Path $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "Persistence removed for '$($Script:TaskName)'."
+}
+
+if ($Install) { Install-Persistence; return }
+if ($Uninstall) { Uninstall-Persistence; return }
+
+# Auto-install if not running from installed location
+$installedPath = Join-Path $Script:InstallDir $Script:ScriptName
+if ($PSCommandPath -and $PSCommandPath -ne $installedPath) {
+    $existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if (-not $existingTask) {
+        Install-Persistence
+        return
+    }
+}
+
+# ==============================
+# Main Logic - Telemetry File Corruption
+# ==============================
+
 # Ensure the script isn't running multiple times
-$currentScript = $PSCommandPath
 $existingProcess = Get-Process | Where-Object {
-    $_.Path -eq $currentScript -and $_.Id -ne $PID
+    $_.Path -eq $PSCommandPath -and $_.Id -ne $PID
 }
 if ($existingProcess) {
     Write-Host "The script is already running. Exiting."
     exit
 }
-
-# Check admin privileges
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
-Write-Host "Running as admin: $isAdmin"
-
-# Initial log with diagnostics
-Write-Output "Script initialized. Admin: $isAdmin, User: $env:USERNAME, SID: $([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)"
-
-# Ensure execution policy allows script
-if ((Get-ExecutionPolicy) -eq "Restricted") {
-    try {
-        Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAction Stop
-        Write-Output "Set execution policy to Bypass for current process."
-    } catch {
-        Write-Output "Failed to set execution policy: $_"
-        exit 1
-    }
-}
-
-function Register-SystemLogonScript {
-    param (
-        [string]$TaskName = "RunCorruptAtLogon"
-    )
-
-    # Define paths
-    $scriptSource = $PSCommandPath
-    if (-not $scriptSource) {
-        Write-Output "Error: Could not determine script path. Ensure the script is run from a file."
-        exit 1
-    }
-    $targetFolder = "C:\Windows\Setup\Scripts\Bin"
-    $targetPath = Join-Path $targetFolder (Split-Path $scriptSource -Leaf)
-
-    # Create required folders
-    if (-not (Test-Path $targetFolder)) {
-        New-Item -Path $targetFolder -ItemType Directory -Force | Out-Null
-        Write-Output "Created folder: $targetFolder"
-    }
-
-    # Copy the script
-    try {
-        Copy-Item -Path $scriptSource -Destination $targetPath -Force -ErrorAction Stop
-        Write-Output "Copied script to: $targetPath"
-    } catch {
-        Write-Output "Failed to copy script to ${targetPath}: $_"
-        exit 1
-    }
-
-    # Define the scheduled task action and trigger
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$targetPath`""
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-
-    # Register the task (cmdlet first, schtasks fallback)
-    $installed = $false
-    try {
-        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -ErrorAction Stop
-        Write-Output "Scheduled task '$TaskName' created via Register-ScheduledTask."
-        $installed = $true
-    } catch {
-        Write-Output "Register-ScheduledTask failed: $_"
-    }
-
-    # Fallback to schtasks.exe
-    if (-not $installed) {
-        try {
-            $schtasksCmd = "schtasks /Create /TN `"$TaskName`" /TR `"powershell.exe -ExecutionPolicy Bypass -File \`"$targetPath\`"`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
-            $result = cmd /c $schtasksCmd 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Output "Scheduled task '$TaskName' created via schtasks.exe fallback."
-            } else {
-                Write-Output "schtasks fallback failed: $result"
-            }
-        } catch {
-            Write-Output "schtasks fallback exception: $_"
-        }
-    }
-}
-
-# Run the function
-Register-SystemLogonScript
 
 $CorruptTelemetry = {
     # Expanded list of target telemetry files
@@ -192,6 +184,3 @@ $CorruptTelemetry = {
 
 # Run the script in a background job
 Start-Job -ScriptBlock $CorruptTelemetry
-
-# Optional: Keep the console open to monitor the job
-# Get-Job | Receive-Job -Keep

@@ -6,12 +6,13 @@
 #Requires -RunAsAdministrator
 
 param(
-    [switch]$Uninstall,
-    [switch]$Restore,
-    [switch]$Status,
-    [switch]$CacheCleanup,
-    [string]$ScanPath
+    [switch]$Install,
+    [switch]$Uninstall
 )
+
+$Script:TaskName = "AntivirusProtection"
+$Script:InstallDir = "$env:ProgramData\Antivirus"
+$Script:ScriptName = "Antivirus.ps1"
 
 $ErrorActionPreference = "SilentlyContinue"
 
@@ -314,71 +315,54 @@ function Invoke-FileScan {
 }
 
 # ====================== Persistence ======================
-function Install-Startup {
-    $installDir = "$env:ProgramData\Antivirus"
-    $installedScript = Join-Path $installDir "Antivirus.ps1"
-    $taskName = "Antivirus"
+function Install-Persistence {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $dest -Force
 
-    # Copy script to ProgramData if not already running from there
-    if ($PSCommandPath -ne $installedScript) {
-        try {
-            Copy-Item -Path $PSCommandPath -Destination $installedScript -Force
-            Write-Log "Script installed to: $installedScript" "OK"
-        } catch {
-            Write-Log "Failed to copy script to $installDir : $_" "WARN"
-            $installedScript = $PSCommandPath  # Fall back to current location
-        }
-    }
+    $existing = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false }
 
-    if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
-        Write-Log "Persistence already configured." "OK"
-        return
-    }
-
-    $pwshArgs = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$installedScript`""
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
     $installed = $false
 
-    # Method 1: PowerShell cmdlets (Register-ScheduledTask)
     try {
         $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
-        $trigger = New-ScheduledTaskTrigger -AtStartup
-        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Antivirus" -Force | Out-Null
-        Write-Log "Persistence installed via Register-ScheduledTask." "OK"
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Hash-based antivirus with real-time protection (Gorstak)" -Force | Out-Null
+        Write-Host "[OK] Persistence installed." -ForegroundColor Green
         $installed = $true
-    } catch {
-        Write-Log "Register-ScheduledTask failed: $_" "WARN"
-    }
+    } catch {}
 
-    # Method 2: schtasks.exe fallback
     if (-not $installed) {
         try {
-            $cmd = "schtasks /Create /TN `"$taskName`" /TR `"powershell.exe $pwshArgs`" /SC ONSTART /RU SYSTEM /RL HIGHEST /F"
-            $result = cmd /c $cmd 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Log "Persistence installed via schtasks.exe fallback." "OK"
-                $installed = $true
-            } else {
-                Write-Log "schtasks fallback failed: $result" "WARN"
-            }
-        } catch {
-            Write-Log "schtasks fallback exception: $_" "WARN"
-        }
+            schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+            Write-Host "[OK] Persistence installed via schtasks." -ForegroundColor Green
+            $installed = $true
+        } catch {}
     }
 
-    if (-not $installed) {
-        Write-Log "WARNING: Could not install persistence via any method." "WARN"
-    }
+    if (-not $installed) { Write-Host "[ERROR] Could not install persistence." -ForegroundColor Red }
+    exit 0
 }
 
-function Uninstall-Antivirus {
-    Write-Log "Uninstalling Antivirus..."
+function Uninstall-Persistence {
+    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    } else {
+        schtasks /Delete /TN "$($Script:TaskName)" /F 2>&1 | Out-Null
+    }
+    # Also clean old task name
     Unregister-ScheduledTask -TaskName "Antivirus" -Confirm:$false -ErrorAction SilentlyContinue
-    schtasks /Delete /TN "Antivirus" /F 2>&1 | Out-Null
-    Write-Log "Scheduled task removed." "OK"
-    Write-Log "Uninstall complete. Data folder remains at $env:ProgramData\Antivirus (delete manually if desired)." "OK"
+    $dest = Join-Path $Script:InstallDir $Script:ScriptName
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $Script:InstallDir) { Remove-Item $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue }
+    Write-Host "[OK] Antivirus uninstalled." -ForegroundColor Green
     exit 0
 }
 
@@ -450,40 +434,20 @@ function Start-RealtimeMonitor {
 Load-Cache
 Write-Log "=== Antivirus Starting ===" "OK"
 
-if ($Uninstall) { Uninstall-Antivirus }
-if ($Restore) { Restore-Quarantine; exit }
-if ($Status) {
-    Write-Host "GShield Status:" -ForegroundColor Green
-    Write-Host "Cache entries: $($script:HashCache.Count)"
-    Write-Host "Quarantine files: $((Get-ChildItem $script:QuarantinePath -ErrorAction SilentlyContinue).Count)"
-    $cacheSize = if (Test-Path $script:CacheCompressed) { (Get-Item $script:CacheCompressed).Length / 1KB } else { 0 }
-    Write-Host "Cache file size: $([math]::Round($cacheSize, 1)) KB (compressed)"
-    exit
-}
-if ($CacheCleanup) {
-    Write-Log "Manual cache cleanup requested." "INFO"
-    $script:CacheLastCleanup = [datetime]::MinValue  # Force cleanup
-    Invoke-CacheCleanup
-    Write-Log "Cache entries after cleanup: $($script:HashCache.Count)" "OK"
-    exit
-}
+if ($Install)   { Install-Persistence }
+if ($Uninstall) { Uninstall-Persistence }
 
-Install-Startup
+# Auto-install on first run
+$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+if (-not $existingTask) { Install-Persistence }
 
-if ($ScanPath) {
-    Invoke-FileScan -Paths @($ScanPath)
-} else {
-    $drives = (Get-CimInstance Win32_LogicalDisk | Where DriveType -eq 3).DeviceID | ForEach-Object { "$_\" }
+# Main logic runs from installed location
+$installedDir = $Script:InstallDir
+if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+    $drives = (Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }).DeviceID | ForEach-Object { "$_\" }
     Invoke-FileScan -Paths $drives
-}
-
-Invoke-MemoryScan
-
-# Only start the blocking realtime monitor if running from the installed location (scheduled task)
-# This prevents blocking when called from a batch file for initial setup
-$installedPath = "$env:ProgramData\Antivirus"
-if ($PSCommandPath -and $PSCommandPath.StartsWith($installedPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Invoke-MemoryScan
     Start-RealtimeMonitor
 } else {
-    Write-Log "Installation complete. Realtime monitor will run via scheduled task." "OK"
+    Write-Log "Installation complete. Antivirus will run via scheduled task." "OK"
 }

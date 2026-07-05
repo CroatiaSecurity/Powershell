@@ -3,8 +3,74 @@
 # Description: Downloads malware-focused IP blocklists (Spamhaus DROP, Emerging Threats,
 #              Feodo Tracker, CINS, Talos, FireHOL), validates and deduplicates IPs, then
 #              creates Windows Firewall rules to block inbound/outbound traffic.
-#              Supports -DryRun mode for preview. One-time run utility.
+#              One-time run at startup with self-unregistering persistence.
 #Requires -RunAsAdministrator
+
+param(
+    [switch]$Install,
+    [switch]$Uninstall
+)
+
+$Script:TaskName = "IPBlockSetup"
+$Script:InstallDir = "$env:ProgramData\IPBlock"
+$Script:ScriptName = "IPBlock.ps1"
+
+# -- Persistence (one-time run at startup) ----------------------
+function Install-Persistence {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $dest -Force
+
+    $existing = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false }
+
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    $installed = $false
+
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtStartup
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "IP blocklist updater (Gorstak)" -Force | Out-Null
+        Write-Host "[OK] Persistence installed." -ForegroundColor Green
+        $installed = $true
+    } catch {}
+
+    if (-not $installed) {
+        try {
+            schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONSTART /RL HIGHEST /F 2>&1 | Out-Null
+            Write-Host "[OK] Persistence installed via schtasks." -ForegroundColor Green
+            $installed = $true
+        } catch {}
+    }
+
+    if (-not $installed) { Write-Host "[ERROR] Could not install persistence." -ForegroundColor Red }
+    exit 0
+}
+
+function Uninstall-Persistence {
+    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    } else {
+        schtasks /Delete /TN "$($Script:TaskName)" /F 2>&1 | Out-Null
+    }
+    $dest = Join-Path $Script:InstallDir $Script:ScriptName
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $Script:InstallDir) { Remove-Item $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue }
+    Write-Host "[OK] IPBlock uninstalled." -ForegroundColor Green
+    exit 0
+}
+
+if ($Install)   { Install-Persistence }
+if ($Uninstall) { Uninstall-Persistence }
+
+# Auto-install on first run
+$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+if (-not $existingTask) { Install-Persistence }
 
 # Function to check if running with elevated privileges (as Administrator)
 function Test-IsAdmin {
@@ -18,7 +84,7 @@ function Ensure-Elevation {
     if (-not (Test-IsAdmin)) {
         Write-Log "Restarting script as Administrator."
         $newProcess = New-Object System.Diagnostics.ProcessStartInfo "powershell"
-        $newProcess.Arguments = "-ExecutionPolicy Bypass -File `"$PSCommandPath`" -DryRun:$DryRun"
+        $newProcess.Arguments = "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
         $newProcess.Verb = "runas"
         $newProcess.WindowStyle = "Hidden"
         [System.Diagnostics.Process]::Start($newProcess)
@@ -55,11 +121,6 @@ function Test-ValidIP {
         return $false
     }
 }
-
-# Command-line parameters
-param (
-    [switch]$DryRun
-)
 
 # Ensure script runs as Administrator
 Ensure-Elevation
@@ -143,13 +204,12 @@ function Add-IPBlock {
     $inboundRuleName = "Block Malware IP (Inbound) - $ipRange"
     $outboundRuleName = "Block Malware IP (Outbound) - $ipRange"
 
-    if (-not $DryRun) {
-        # Block inbound traffic
-        New-NetFirewallRule -DisplayName $inboundRuleName -Direction Inbound -Action Block -RemoteAddress $ipRange -Profile Any -Verbose -ErrorAction SilentlyContinue
-        # Block outbound traffic
-        New-NetFirewallRule -DisplayName $outboundRuleName -Direction Outbound -Action Block -RemoteAddress $ipRange -Profile Any -Verbose -ErrorAction SilentlyContinue
-    }
-    Write-Log "Blocked IP/Range: $ipRange (DryRun: $DryRun)"
+    # Block inbound traffic
+    New-NetFirewallRule -DisplayName $inboundRuleName -Direction Inbound -Action Block -RemoteAddress $ipRange -Profile Any -Verbose -ErrorAction SilentlyContinue
+    # Block outbound traffic
+    New-NetFirewallRule -DisplayName $outboundRuleName -Direction Outbound -Action Block -RemoteAddress $ipRange -Profile Any -Verbose -ErrorAction SilentlyContinue
+
+    Write-Log "Blocked IP/Range: $ipRange"
 }
 
 # Download and process each blocklist
@@ -181,5 +241,11 @@ foreach ($ip in $uniqueIPs) {
     }
 }
 
-Write-Log "IP blocking process complete (DryRun: $DryRun)" -Level "INFO"
+Write-Log "IP blocking process complete" -Level "INFO"
 Write-Host "Block list logged to $logFile" -ForegroundColor Yellow
+
+# Self-unregister the scheduled task after successful completion
+$task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+if ($task) {
+    Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+}

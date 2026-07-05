@@ -1,24 +1,26 @@
 # CookieMonitor.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Monitors Chrome cookie database for unauthorized changes (session hijacking).
-#              Backs up cookies at startup, detects hash changes, and restores cookies from
-#              backup on tampering. Installs persistent scheduled tasks for monitoring
-#              (every 5 min) and backup (startup).
+#              Backs up cookies at startup, detects hash changes every 5 minutes, and restores
+#              cookies from backup on tampering. Persistent via scheduled task at logon.
 #Requires -RunAsAdministrator
 
 param(
-    [switch]$Monitor,
-    [switch]$Backup
+    [switch]$Install,
+    [switch]$Uninstall
 )
 
+$Script:TaskName = "CookieMonitorProtection"
+$Script:InstallDir = "$env:ProgramData\CookieMonitor"
+$Script:ScriptName = "CookieMonitor.ps1"
+
 # === Configuration ===
-$taskScriptPath = "C:\Windows\Setup\Scripts\Bin\CookieMonitor.ps1"
-$logDir = "C:\logs"
-$backupDir = "$env:ProgramData\CookieBackup"
+$backupDir = "$env:ProgramData\CookieMonitor"
 $cookieLogPath = "$backupDir\CookieMonitor.log"
 $errorLogPath = "$backupDir\ScriptErrors.log"
 $cookiePath = "$env:LocalAppData\Google\Chrome\User Data\Default\Cookies"
 $backupPath = "$backupDir\Cookies.bak"
+$hashFile = "$backupDir\CookieHash.txt"
 
 # === Logging ===
 function Log-Info($msg) {
@@ -33,108 +35,73 @@ function Log-Error($msg) {
 
 # === Setup Required Folders ===
 function Initialize-Environment {
-    foreach ($dir in @($logDir, $backupDir)) {
-        if (-not (Test-Path $dir)) {
-            New-Item -Path $dir -ItemType Directory -Force | Out-Null
-        }
+    if (-not (Test-Path $backupDir)) {
+        New-Item -Path $backupDir -ItemType Directory -Force | Out-Null
     }
 }
 
-# === Self-Copy and Schedule ===
-function Install-Script {
-    $targetFolder = Split-Path $taskScriptPath
-    if (-not (Test-Path $targetFolder)) {
-        New-Item -Path $targetFolder -ItemType Directory -Force | Out-Null
-    }
+# -- Persistence ------------------------------------------------
+function Install-Persistence {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $dest -Force
 
-    Copy-Item -Path $PSCommandPath -Destination $taskScriptPath -Force
-    Log-Info "Script copied to $taskScriptPath"
+    $existing = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false }
 
-    # Unregister all tasks to prevent conflicts
-    $taskNames = @("MonitorCookiesLogon", "BackupCookiesOnStartup", "MonitorCookies")
-    foreach ($taskName in $taskNames) {
-        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-    }
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    $installed = $false
 
-    # SYSTEM logon task (cmdlet first, schtasks fallback)
-    $logonTaskName = "MonitorCookiesLogon"
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$taskScriptPath`""
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $logonInstalled = $false
     try {
-        Register-ScheduledTask -TaskName $logonTaskName -Action $action -Trigger $trigger -Principal $principal -ErrorAction Stop
-        $logonInstalled = $true
-    } catch {
-        Log-Info "Register-ScheduledTask failed for $logonTaskName, trying schtasks..."
-    }
-    if (-not $logonInstalled) {
-        $schtasksCmd = "schtasks /Create /TN `"$logonTaskName`" /TR `"powershell.exe -ExecutionPolicy Bypass -File \`"$taskScriptPath\`"`" /SC ONLOGON /RU SYSTEM /RL HIGHEST /F"
-        cmd /c $schtasksCmd 2>&1 | Out-Null
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Chrome cookie integrity monitor (Gorstak)" -Force | Out-Null
+        Write-Host "[OK] Persistence installed." -ForegroundColor Green
+        $installed = $true
+    } catch {}
+
+    if (-not $installed) {
+        try {
+            schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+            Write-Host "[OK] Persistence installed via schtasks." -ForegroundColor Green
+            $installed = $true
+        } catch {}
     }
 
-    # Startup backup task (cmdlet first, schtasks fallback)
-    $backupTaskName = "BackupCookiesOnStartup"
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$taskScriptPath`" -Backup"
-    $trigger = New-ScheduledTaskTrigger -AtStartup
-    $backupInstalled = $false
-    try {
-        Register-ScheduledTask -TaskName $backupTaskName -Action $action -Trigger $trigger -Principal $principal -ErrorAction Stop
-        $backupInstalled = $true
-    } catch {
-        Log-Info "Register-ScheduledTask failed for $backupTaskName, trying schtasks..."
-    }
-    if (-not $backupInstalled) {
-        $schtasksCmd = "schtasks /Create /TN `"$backupTaskName`" /TR `"powershell.exe -ExecutionPolicy Bypass -File \`"$taskScriptPath\`" -Backup`" /SC ONSTART /RU SYSTEM /RL HIGHEST /F"
-        cmd /c $schtasksCmd 2>&1 | Out-Null
-    }
-
-    # Monitoring task (every 5 min)
-    $monitorTaskName = "MonitorCookies"
-    $taskService = New-Object -ComObject Schedule.Service
-    $taskService.Connect()
-    $taskDefinition = $taskService.NewTask(0)
-    $triggers = $taskDefinition.Triggers
-    $trigger = $triggers.Create(1) # 1 = TimeTrigger
-    $trigger.StartBoundary = (Get-Date).AddMinutes(1).ToString("yyyy-MM-dd'T'HH:mm:ss")
-    $trigger.Repetition.Interval = "PT5M" # 5 minutes
-    $trigger.Repetition.Duration = "P365D" # 365 days
-    $trigger.Enabled = $true
-    $action = $taskDefinition.Actions.Create(0)
-    $action.Path = "powershell.exe"
-    $action.Arguments = "-ExecutionPolicy Bypass -File `"$taskScriptPath`" -Monitor"
-    $taskDefinition.Settings.Enabled = $true
-    $taskDefinition.Settings.AllowDemandStart = $true
-    $taskDefinition.Settings.StartWhenAvailable = $true
-    $taskService.GetFolder("\").RegisterTaskDefinition($monitorTaskName, $taskDefinition, 6, "SYSTEM", $null, 4)
-
-    Log-Info "Scheduled tasks installed."
+    if (-not $installed) { Write-Host "[ERROR] Could not install persistence." -ForegroundColor Red }
+    exit 0
 }
 
-# === Cookie Monitor ===
-function Monitor-Cookies {
-    if (-not (Test-Path $cookiePath)) {
-        Log-Info "No Chrome cookies found."
-        return
+function Uninstall-Persistence {
+    # Also clean up old task names from previous versions
+    foreach ($oldTask in @("MonitorCookiesLogon", "BackupCookiesOnStartup", "MonitorCookies")) {
+        Unregister-ScheduledTask -TaskName $oldTask -Confirm:$false -ErrorAction SilentlyContinue
     }
-
-    try {
-        $hashFile = "$backupDir\CookieHash.txt"
-        $currentHash = (Get-FileHash -Path $cookiePath -Algorithm SHA256).Hash
-        $lastHash = if (Test-Path $hashFile) { (Get-Content $hashFile -Raw).Trim() } else { "" }
-
-        if ($lastHash -and $currentHash -ne $lastHash) {
-            Log-Info "Cookie hash changed. Restoring from backup..."
-            Restore-Cookies
-        }
-
-        $currentHash | Set-Content -Path $hashFile -Force
-    } catch {
-        Log-Error "Monitor-Cookies error: $_"
+    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    } else {
+        schtasks /Delete /TN "$($Script:TaskName)" /F 2>&1 | Out-Null
     }
+    $dest = Join-Path $Script:InstallDir $Script:ScriptName
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $Script:InstallDir) { Remove-Item $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue }
+    Write-Host "[OK] CookieMonitor uninstalled." -ForegroundColor Green
+    exit 0
 }
 
-# === Backup ===
+if ($Install)   { Install-Persistence }
+if ($Uninstall) { Uninstall-Persistence }
+
+# Auto-install on first run
+$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+if (-not $existingTask) { Install-Persistence }
+
+# === Cookie Backup ===
 function Backup-Cookies {
     try {
         Stop-Process -Name "chrome" -Force -ErrorAction SilentlyContinue
@@ -148,7 +115,7 @@ function Backup-Cookies {
     }
 }
 
-# === Restore ===
+# === Cookie Restore ===
 function Restore-Cookies {
     try {
         if (Test-Path $backupPath) {
@@ -160,11 +127,40 @@ function Restore-Cookies {
     }
 }
 
-# === Entry Point ===
-Initialize-Environment
+# === Cookie Monitor ===
+function Monitor-Cookies {
+    if (-not (Test-Path $cookiePath)) {
+        Log-Info "No Chrome cookies found."
+        return
+    }
+    try {
+        $currentHash = (Get-FileHash -Path $cookiePath -Algorithm SHA256).Hash
+        $lastHash = if (Test-Path $hashFile) { (Get-Content $hashFile -Raw).Trim() } else { "" }
 
-if ($Monitor) { Monitor-Cookies; return }
-if ($Backup) { Backup-Cookies; return }
+        if ($lastHash -and $currentHash -ne $lastHash) {
+            Log-Info "Cookie hash changed. Restoring from backup..."
+            Restore-Cookies
+        }
+        $currentHash | Set-Content -Path $hashFile -Force
+    } catch {
+        Log-Error "Monitor-Cookies error: $_"
+    }
+}
 
-# Main install
-Install-Script
+# === Main Logic (runs from installed location) ===
+$installedDir = $Script:InstallDir
+if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+    Initialize-Environment
+    Log-Info "CookieMonitor started."
+
+    # Backup cookies first
+    Backup-Cookies
+
+    # Monitor loop - check every 5 minutes
+    while ($true) {
+        Monitor-Cookies
+        Start-Sleep -Seconds 300
+    }
+} else {
+    Write-Host "[OK] CookieMonitor installed. Monitor runs via scheduled task." -ForegroundColor Green
+}

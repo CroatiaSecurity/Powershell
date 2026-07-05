@@ -8,16 +8,15 @@
 
 # Windows security script focusing on security rules with enhanced ASR rule application
 
-param (
-    [switch]$Monitor,
-    [switch]$Backup,
-    [switch]$ResetPassword,
-    [switch]$Start,
-    [string]$SnortOinkcode = "6cc50dfad45e71e9d8af44485f59af2144ad9a3c",
-    [switch]$DebugMode,
-    [switch]$NoMonitor,
-    [string]$ConfigPath = "$env:USERPROFILE\GRules_config.json"
+param(
+    [switch]$Install,
+    [switch]$Uninstall
 )
+
+$Script:TaskName = "GRulesProtection"
+$Script:InstallDir = "$env:ProgramData\GRules"
+$Script:ScriptName = "GRules.ps1"
+$SnortOinkcode = "6cc50dfad45e71e9d8af44485f59af2144ad9a3c"
 
 $ErrorActionPreference = "Stop"  # Ensure errors are visible
 $ProgressPreference = "Continue"  # Show progress in console
@@ -27,6 +26,63 @@ $Global:LogFile = "$Global:LogDir\GRules_$(Get-Date -Format 'yyyyMMdd').log"
 
 # Enable TLS 1.2 for secure connections
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# -- Persistence ------------------------------------------------
+function Install-Persistence {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $dest -Force
+
+    $existing = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($existing) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false }
+
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    $installed = $false
+
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtStartup
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Security rules updater (Gorstak)" -Force | Out-Null
+        Write-Host "[OK] Persistence installed." -ForegroundColor Green
+        $installed = $true
+    } catch {}
+
+    if (-not $installed) {
+        try {
+            schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONSTART /RL HIGHEST /F 2>&1 | Out-Null
+            Write-Host "[OK] Persistence installed via schtasks." -ForegroundColor Green
+            $installed = $true
+        } catch {}
+    }
+
+    if (-not $installed) { Write-Host "[ERROR] Could not install persistence." -ForegroundColor Red }
+    exit 0
+}
+
+function Uninstall-Persistence {
+    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+    if ($task) {
+        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    } else {
+        schtasks /Delete /TN "$($Script:TaskName)" /F 2>&1 | Out-Null
+    }
+    $dest = Join-Path $Script:InstallDir $Script:ScriptName
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $Script:InstallDir) { Remove-Item $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue }
+    Write-Host "[OK] GRules uninstalled." -ForegroundColor Green
+    exit 0
+}
+
+if ($Install)   { Install-Persistence }
+if ($Uninstall) { Uninstall-Persistence }
+
+# Auto-install on first run
+$existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+if (-not $existingTask) { Install-Persistence }
 
 # Configuration
 $Global:Config = @{
@@ -418,7 +474,6 @@ function Apply-SecurityRules {
 
 # Monitor Processes
 function Monitor-Processes {
-    if ($NoMonitor) { return }
     Write-Log "Starting process monitoring..."
     try {
         $events = Get-WinEvent -LogName "Security" -FilterXPath "*[System[(EventID=4688)]]" -MaxEvents $Global:Config.Telemetry.MaxEvents
