@@ -1,53 +1,211 @@
 <#
 .SYNOPSIS
     GFetch - A Neofetch/Winfetch style system info script for Windows
-    Author: Gorstak (gorstak.eu)
     Compatible with Windows 10+ (PowerShell 5.1+)
-.DESCRIPTION
-    Displays system information in a visually appealing format including OS, CPU, GPU,
-    memory, disk, network, battery, .NET version, Defender status, and more.
-    Interactive utility, no persistence needed.
+    Resilient to WMI/CIM failures - uses registry/API fallbacks
 #>
 
-# --- Gather System Info ---
+# --- Gather System Info (with CIM fallbacks) ---
 
-$OS = Get-CimInstance Win32_OperatingSystem
-$CPU = Get-CimInstance Win32_Processor | Select-Object -First 1
-$GPU = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch 'Microsoft|Basic' } | Select-Object -First 1
-if (-not $GPU) { $GPU = Get-CimInstance Win32_VideoController | Select-Object -First 1 }
-$CS = Get-CimInstance Win32_ComputerSystem
-$Baseboard = Get-CimInstance Win32_BaseBoard
+# OS Info
+$OS = $null
+try { $OS = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } catch {}
+
+if ($OS) {
+    $OSName = $OS.Caption -replace 'Microsoft ', ''
+    $OSBuild = $OS.BuildNumber
+    $OSVersion = $OS.Version
+    $LastBootTime = $OS.LastBootUpTime
+    $TotalMemKB = $OS.TotalVisibleMemorySize
+    $FreeMemKB = $OS.FreePhysicalMemory
+} else {
+    # Fallback: registry + environment
+    $curVer = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -EA SilentlyContinue
+    $OSName = if ($curVer.ProductName) { $curVer.ProductName } else { "Windows" }
+    $OSBuild = if ($curVer.CurrentBuildNumber) { $curVer.CurrentBuildNumber } else { "" }
+    $major = if ($curVer.CurrentMajorVersionNumber) { $curVer.CurrentMajorVersionNumber } else { "10" }
+    $minor = if ($curVer.CurrentMinorVersionNumber) { $curVer.CurrentMinorVersionNumber } else { "0" }
+    $OSVersion = "$major.$minor.$OSBuild"
+    # Boot time from event log or perf counter
+    $LastBootTime = $null
+    try {
+        $tick = [Environment]::TickCount64
+        $LastBootTime = (Get-Date).AddMilliseconds(-$tick)
+    } catch {
+        try {
+            $tick = [Environment]::TickCount
+            $LastBootTime = (Get-Date).AddMilliseconds(-$tick)
+        } catch {}
+    }
+    # Memory via .NET
+    $TotalMemKB = $null
+    $FreeMemKB = $null
+    try {
+        Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public class MemInfo {
+    [StructLayout(LayoutKind.Sequential)] public struct MEMORYSTATUSEX {
+        public uint dwLength; public uint dwMemoryLoad;
+        public ulong ullTotalPhys; public ulong ullAvailPhys;
+        public ulong ullTotalPageFile; public ulong ullAvailPageFile;
+        public ulong ullTotalVirtual; public ulong ullAvailVirtual;
+        public ulong ullAvailExtendedVirtual;
+    }
+    [DllImport("kernel32.dll")] public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+}
+"@ -ErrorAction SilentlyContinue
+        $mem = New-Object MemInfo+MEMORYSTATUSEX
+        $mem.dwLength = [uint32][System.Runtime.InteropServices.Marshal]::SizeOf($mem)
+        [void][MemInfo]::GlobalMemoryStatusEx([ref]$mem)
+        $TotalMemKB = [math]::Round($mem.ullTotalPhys / 1KB)
+        $FreeMemKB = [math]::Round($mem.ullAvailPhys / 1KB)
+    } catch {}
+}
+
+# CPU Info
+$CPU = $null
+try { $CPU = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1 } catch {}
+
+if ($CPU) {
+    $CPUName = ($CPU.Name -replace '\s+', ' ').Trim()
+    $CPUCores = $CPU.NumberOfCores
+    $CPUThreads = $CPU.NumberOfLogicalProcessors
+    $CPUUsage = $CPU.LoadPercentage
+} else {
+    # Fallback: registry
+    $cpuReg = Get-ItemProperty "HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor\0" -EA SilentlyContinue
+    $CPUName = if ($cpuReg.ProcessorNameString) { ($cpuReg.ProcessorNameString -replace '\s+', ' ').Trim() } else { "Unknown CPU" }
+    $CPUCores = $env:NUMBER_OF_PROCESSORS
+    $CPUThreads = $env:NUMBER_OF_PROCESSORS
+    # Try to get actual core count from registry
+    try {
+        $coreCount = (Get-ChildItem "HKLM:\HARDWARE\DESCRIPTION\System\CentralProcessor" -EA SilentlyContinue).Count
+        if ($coreCount -gt 0) { $CPUThreads = $coreCount }
+    } catch {}
+    $CPUUsage = $null
+}
+if ($null -eq $CPUUsage) { $CPUUsage = "N/A" } else { $CPUUsage = "${CPUUsage}%" }
+
+# GPU Info
+$GPU = $null
+try {
+    $GPU = Get-CimInstance Win32_VideoController -ErrorAction Stop | Where-Object { $_.Name -notmatch 'Microsoft|Basic' } | Select-Object -First 1
+    if (-not $GPU) { $GPU = Get-CimInstance Win32_VideoController -ErrorAction Stop | Select-Object -First 1 }
+} catch {}
+
+if ($GPU) {
+    $GPUName = $GPU.Name
+} else {
+    # Fallback: registry
+    $GPUName = "N/A"
+    try {
+        $vidKeys = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}" -EA SilentlyContinue
+        foreach ($key in $vidKeys) {
+            $props = Get-ItemProperty $key.PSPath -EA SilentlyContinue
+            if ($props.DriverDesc -and $props.DriverDesc -notmatch 'Microsoft|Basic') {
+                $GPUName = $props.DriverDesc
+                break
+            }
+        }
+        # If still N/A, take any GPU
+        if ($GPUName -eq "N/A") {
+            foreach ($key in $vidKeys) {
+                $props = Get-ItemProperty $key.PSPath -EA SilentlyContinue
+                if ($props.DriverDesc) { $GPUName = $props.DriverDesc; break }
+            }
+        }
+    } catch {}
+}
+
+# ComputerSystem
+$CS = $null
+try { $CS = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop } catch {}
+
+# BaseBoard
+$Baseboard = $null
+try { $Baseboard = Get-CimInstance Win32_BaseBoard -ErrorAction Stop } catch {}
+
+if ($Baseboard) {
+    $MoboStr = "$($Baseboard.Manufacturer) $($Baseboard.Product)"
+} else {
+    # Fallback: registry
+    $MoboStr = "Unknown"
+    try {
+        $biosReg = Get-ItemProperty "HKLM:\HARDWARE\DESCRIPTION\System\BIOS" -EA SilentlyContinue
+        if ($biosReg.BaseBoardManufacturer -and $biosReg.BaseBoardProduct) {
+            $MoboStr = "$($biosReg.BaseBoardManufacturer) $($biosReg.BaseBoardProduct)"
+        }
+    } catch {}
+}
 
 # User and Host
 $UserName = $env:USERNAME
 $HostName = $env:COMPUTERNAME
 
-# OS
-$OSName = $OS.Caption -replace 'Microsoft ', ''
-$OSBuild = $OS.BuildNumber
-$OSVersion = $OS.Version
-
 # Kernel
 $Kernel = "NT $OSVersion"
 
 # Uptime
-$Uptime = (Get-Date) - $OS.LastBootUpTime
-$UptimeStr = ""
-if ($Uptime.Days -gt 0) { $UptimeStr += "$($Uptime.Days)d " }
-if ($Uptime.Hours -gt 0) { $UptimeStr += "$($Uptime.Hours)h " }
-$UptimeStr += "$($Uptime.Minutes)m"
+$UptimeStr = "N/A"
+if ($LastBootTime) {
+    try {
+        $Uptime = (Get-Date) - $LastBootTime
+        $UptimeStr = ""
+        if ($Uptime.Days -gt 0) { $UptimeStr += "$($Uptime.Days)d " }
+        if ($Uptime.Hours -gt 0) { $UptimeStr += "$($Uptime.Hours)h " }
+        $UptimeStr += "$($Uptime.Minutes)m"
+    } catch { $UptimeStr = "N/A" }
+}
 
 # Shell
 $ShellVersion = "PowerShell $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor)"
 
-# Terminal
+# Terminal detection
 $Terminal = $null
 try {
-    $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId
+    $parentId = $null
+    # Try CIM first
+    try {
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId = $PID" -ErrorAction Stop
+        $parentId = $proc.ParentProcessId
+    } catch {
+        # Fallback: .NET Process
+        try {
+            $currentProc = [System.Diagnostics.Process]::GetCurrentProcess()
+            # PowerShell 5.1 doesn't have Parent property; use WMI-free method
+            Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+public class ProcInfo {
+    [StructLayout(LayoutKind.Sequential)] public struct PROCESS_BASIC_INFORMATION {
+        public IntPtr Reserved1; public IntPtr PebBaseAddress; public IntPtr Reserved2a;
+        public IntPtr Reserved2b; public IntPtr UniqueProcessId; public IntPtr InheritedFromUniqueProcessId;
+    }
+    [DllImport("ntdll.dll")] public static extern int NtQueryInformationProcess(
+        IntPtr hProcess, int processInformationClass, ref PROCESS_BASIC_INFORMATION processInformation,
+        int processInformationLength, out int returnLength);
+    public static int GetParentPid(IntPtr handle) {
+        var pbi = new PROCESS_BASIC_INFORMATION();
+        int retLen; NtQueryInformationProcess(handle, 0, ref pbi, Marshal.SizeOf(pbi), out retLen);
+        return pbi.InheritedFromUniqueProcessId.ToInt32();
+    }
+}
+"@ -ErrorAction SilentlyContinue
+            $parentId = [ProcInfo]::GetParentPid($currentProc.Handle)
+        } catch {}
+    }
     if ($parentId) {
-        $parentProc = Get-CimInstance Win32_Process -Filter "ProcessId = $parentId" -ErrorAction SilentlyContinue
-        if ($parentProc) {
+        $parentProc = $null
+        try {
+            $parentProc = Get-CimInstance Win32_Process -Filter "ProcessId = $parentId" -ErrorAction Stop
             $termName = [System.IO.Path]::GetFileNameWithoutExtension($parentProc.Name)
+        } catch {
+            # Fallback: .NET Process
+            try {
+                $p = [System.Diagnostics.Process]::GetProcessById($parentId)
+                $termName = [System.IO.Path]::GetFileNameWithoutExtension($p.ProcessName)
+            } catch {}
+        }
+        if ($termName) {
             $Terminal = switch ($termName) {
                 'WindowsTerminal'   { 'Windows Terminal' }
                 'cmd'               { 'CMD' }
@@ -55,6 +213,8 @@ try {
                 'pwsh'              { 'PowerShell Core' }
                 'ConEmuC64'         { 'ConEmu' }
                 'ConEmuC'           { 'ConEmu' }
+                'Code'              { 'VS Code' }
+                'Kiro'              { 'Kiro' }
                 default             { $termName }
             }
         }
@@ -62,28 +222,46 @@ try {
 } catch {}
 if (-not $Terminal) { $Terminal = "Unknown" }
 
-# CPU
-$CPUName = ($CPU.Name -replace '\s+', ' ').Trim()
-$CPUCores = $CPU.NumberOfCores
-$CPUThreads = $CPU.NumberOfLogicalProcessors
-$CPUUsage = $CPU.LoadPercentage
-if ($null -eq $CPUUsage) { $CPUUsage = "N/A" } else { $CPUUsage = "${CPUUsage}%" }
-
-# GPU
-$GPUName = if ($GPU) { $GPU.Name } else { "N/A" }
-
 # Memory
-$TotalMem = [math]::Round($OS.TotalVisibleMemorySize / 1MB, 1)
-$UsedMem = [math]::Round(($OS.TotalVisibleMemorySize - $OS.FreePhysicalMemory) / 1MB, 1)
-$MemPercent = [math]::Round(($UsedMem / $TotalMem) * 100)
-$MemStr = "${UsedMem} GB / ${TotalMem} GB (${MemPercent}%)"
+$TotalMem = 0
+$UsedMem = 0
+$MemPercent = 0
+$MemStr = "N/A"
+if ($TotalMemKB -and $TotalMemKB -gt 0) {
+    $TotalMem = [math]::Round($TotalMemKB / 1MB, 1)
+    if ($FreeMemKB) {
+        $UsedMem = [math]::Round(($TotalMemKB - $FreeMemKB) / 1MB, 1)
+    }
+    if ($TotalMem -gt 0) {
+        $MemPercent = [math]::Round(($UsedMem / $TotalMem) * 100)
+    }
+    $MemStr = "${UsedMem} GB / ${TotalMem} GB (${MemPercent}%)"
+}
 
 # Disk
-$Disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'"
-$DiskTotal = [math]::Round($Disk.Size / 1GB, 1)
-$DiskUsed = [math]::Round(($Disk.Size - $Disk.FreeSpace) / 1GB, 1)
-$DiskPercent = [math]::Round(($DiskUsed / $DiskTotal) * 100)
-$DiskStr = "${DiskUsed} GB / ${DiskTotal} GB (${DiskPercent}%)"
+$DiskStr = "N/A"
+$DiskTotal = 0
+$DiskUsed = 0
+$DiskPercent = 0
+try {
+    $Disk = $null
+    try { $Disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" -ErrorAction Stop } catch {}
+    if ($Disk -and $Disk.Size -gt 0) {
+        $DiskTotal = [math]::Round($Disk.Size / 1GB, 1)
+        $DiskUsed = [math]::Round(($Disk.Size - $Disk.FreeSpace) / 1GB, 1)
+    } else {
+        # Fallback: .NET DriveInfo
+        $drv = [System.IO.DriveInfo]::new($env:SystemDrive)
+        if ($drv.IsReady -and $drv.TotalSize -gt 0) {
+            $DiskTotal = [math]::Round($drv.TotalSize / 1GB, 1)
+            $DiskUsed = [math]::Round(($drv.TotalSize - $drv.TotalFreeSpace) / 1GB, 1)
+        }
+    }
+    if ($DiskTotal -gt 0) {
+        $DiskPercent = [math]::Round(($DiskUsed / $DiskTotal) * 100)
+        $DiskStr = "${DiskUsed} GB / ${DiskTotal} GB (${DiskPercent}%)"
+    }
+} catch {}
 
 # Disk type (SSD or HDD)
 $DiskType = "Unknown"
@@ -107,9 +285,6 @@ try {
     $Resolution = "$($screen.Width)x$($screen.Height)"
 } catch {}
 
-# Motherboard
-$MoboStr = "$($Baseboard.Manufacturer) $($Baseboard.Product)"
-
 # Packages
 $Packages = $null
 try {
@@ -121,8 +296,21 @@ try {
 # Local IP
 $LocalIP = "N/A"
 try {
-    $adapter = Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -eq $true -and $_.IPAddress } | Select-Object -First 1
-    if ($adapter) { $LocalIP = ($adapter.IPAddress | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' }) }
+    $adapter = $null
+    try { $adapter = Get-CimInstance Win32_NetworkAdapterConfiguration -ErrorAction Stop | Where-Object { $_.IPEnabled -eq $true -and $_.IPAddress } | Select-Object -First 1 } catch {}
+    if ($adapter) {
+        $LocalIP = ($adapter.IPAddress | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+$' })
+    } else {
+        # Fallback: .NET
+        $netIfaces = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()
+        foreach ($iface in $netIfaces) {
+            if ($iface.OperationalStatus -eq 'Up' -and $iface.NetworkInterfaceType -ne 'Loopback') {
+                $ipProps = $iface.GetIPProperties()
+                $unicast = $ipProps.UnicastAddresses | Where-Object { $_.Address.AddressFamily -eq 'InterNetwork' }
+                if ($unicast) { $LocalIP = $unicast[0].Address.ToString(); break }
+            }
+        }
+    }
 } catch {}
 
 # Public IP
@@ -134,8 +322,16 @@ try {
 # Network adapter
 $NetAdapter = "N/A"
 try {
-    $na = Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.NetConnectionStatus -eq 2 } | Select-Object -First 1
-    if ($na) { $NetAdapter = $na.Name }
+    $na = $null
+    try { $na = Get-CimInstance Win32_NetworkAdapter -ErrorAction Stop | Where-Object { $_.NetConnectionStatus -eq 2 } | Select-Object -First 1 } catch {}
+    if ($na) {
+        $NetAdapter = $na.Name
+    } else {
+        # Fallback: .NET
+        $netIfaces = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()
+        $upIface = $netIfaces | Where-Object { $_.OperationalStatus -eq 'Up' -and $_.NetworkInterfaceType -ne 'Loopback' } | Select-Object -First 1
+        if ($upIface) { $NetAdapter = $upIface.Description }
+    }
 } catch {}
 
 # Battery
@@ -185,8 +381,18 @@ try {
 # Windows activation
 $Activation = "Unknown"
 try {
-    $lic = Get-CimInstance SoftwareLicensingProduct | Where-Object { $_.PartialProductKey -and $_.LicenseStatus -eq 1 } | Select-Object -First 1
-    if ($lic) { $Activation = "Activated" } else { $Activation = "Not Activated" }
+    $lic = $null
+    try { $lic = Get-CimInstance SoftwareLicensingProduct -ErrorAction Stop | Where-Object { $_.PartialProductKey -and $_.LicenseStatus -eq 1 } | Select-Object -First 1 } catch {}
+    if ($lic) {
+        $Activation = "Activated"
+    } else {
+        # Fallback: cscript slmgr
+        try {
+            $slmgr = & cscript //nologo "$env:SystemRoot\System32\slmgr.vbs" /dli 2>$null
+            if ($slmgr -match 'License Status:\s*Licensed') { $Activation = "Activated" }
+            else { $Activation = "Not Activated" }
+        } catch { $Activation = "Unknown" }
+    }
 } catch {}
 
 # Wallpaper path
@@ -212,6 +418,15 @@ try {
     if ($defStatus) {
         $rtProtection = if ($defStatus.RealTimeProtectionEnabled) { "On" } else { "Off" }
         $Defender = "Real-Time: $rtProtection"
+    } else {
+        # Fallback: Get-MpPreference
+        try {
+            $mpPref = Get-MpPreference -ErrorAction SilentlyContinue
+            if ($mpPref) {
+                $rtProtection = if ($mpPref.DisableRealtimeMonitoring) { "Off" } else { "On" }
+                $Defender = "Real-Time: $rtProtection"
+            }
+        } catch {}
     }
 } catch {}
 
@@ -247,7 +462,6 @@ try {
         elseif ($rel -ge 393295) { "4.6" }
         else { "4.5+" }
     }
-    # Also check for .NET Core / 5+
     $dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
     if ($dotnetCmd) {
         $runtimes = & dotnet --list-runtimes 2>$null | Select-String "Microsoft.NETCore.App" | Select-Object -Last 1
@@ -347,7 +561,15 @@ for ($i = 0; $i -lt $maxLines; $i++) {
 }
 Write-Host ""
 
-# --- Show Public IP directly (non-interactive) ---
+# --- Interactive prompt ---
 
-Write-Host "${BC}Public IP${R}    $PublicIP"
+Write-Host "${D}Press [P] to reveal Public IP, or any other key to exit.${R}" -NoNewline
+$key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
 Write-Host ""
+if ($key.Character -eq 'p' -or $key.Character -eq 'P') {
+    Write-Host "${BC}Public IP${R}    $PublicIP"
+    Write-Host ""
+    Write-Host "${D}Press any key to exit.${R}" -NoNewline
+    [void]$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+    Write-Host ""
+}
