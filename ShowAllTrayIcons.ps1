@@ -1,9 +1,12 @@
 # Show All Tray Icons - Makes all notification area icons always visible
-# Applies immediately and registers a logon task that re-applies every minute
-# so newly created tray icons stay promoted.
+# Installs a silent (no console flash) scheduled task that re-applies every
+# minute so newly created tray icons stay promoted.
 
 $ErrorActionPreference = 'Stop'
-$taskName = 'ShowAllTrayIcons'
+$taskName   = 'ShowAllTrayIcons'
+$installDir = Join-Path $env:ProgramData 'ShowAllTrayIcons'
+$promotePs1 = Join-Path $installDir 'Promote.ps1'
+$runnerVbs  = Join-Path $installDir 'RunSilent.vbs'
 
 function Set-AllTrayIconsPromoted {
     $base = 'HKCU:\Control Panel\NotifyIconSettings'
@@ -16,6 +19,12 @@ function Set-AllTrayIconsPromoted {
         New-ItemProperty -LiteralPath $_.PSPath -Name 'IsPromoted' -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue | Out-Null
         $count++
     }
+
+    try {
+        New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer' `
+            -Name 'EnableAutoTray' -PropertyType DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null
+    } catch {}
+
     return $count
 }
 
@@ -23,27 +32,55 @@ function ConvertTo-XmlAttributeValue([string]$Value) {
     return ($Value -replace '&', '&amp;' -replace '"', '&quot;' -replace '<', '&lt;' -replace '>', '&gt;')
 }
 
-# Legacy "Always show all icons" (still respected by many Windows builds)
-try {
-    New-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer' `
-        -Name 'EnableAutoTray' -PropertyType DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null
-} catch {}
+function Install-SilentLauncher {
+    if (-not (Test-Path -LiteralPath $installDir)) {
+        New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+    }
 
-# Apply immediately for current user
+    # Worker: no Write-Host, no prompts — pure registry work
+    $promoteBody = @'
+$ErrorActionPreference = "SilentlyContinue"
+$base = "HKCU:\Control Panel\NotifyIconSettings"
+if (Test-Path -LiteralPath $base) {
+    Get-ChildItem -LiteralPath $base | ForEach-Object {
+        New-ItemProperty -LiteralPath $_.PSPath -Name "IsPromoted" -PropertyType DWord -Value 1 -Force | Out-Null
+    }
+}
+New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer" -Name "EnableAutoTray" -PropertyType DWord -Value 0 -Force | Out-Null
+'@
+    Set-Content -LiteralPath $promotePs1 -Value $promoteBody -Encoding UTF8 -Force
+
+    # VBS runs PowerShell with window style 0 (completely hidden — no flash)
+    $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $vbsBody = @"
+' Silent launcher for ShowAllTrayIcons — window style 0 = hidden
+Option Explicit
+Dim sh, cmd
+Set sh = CreateObject("WScript.Shell")
+cmd = """$psExe"" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$promotePs1"""
+sh.Run cmd, 0, False
+"@
+    Set-Content -LiteralPath $runnerVbs -Value $vbsBody -Encoding ASCII -Force
+}
+
+# Apply immediately for current user (installer console is fine to show once)
 $promoted = Set-AllTrayIconsPromoted
 Write-Host "Promoted $promoted tray icon(s) for the current session."
 
-# Compact one-liner for the scheduled task action ($_ must stay literal for the task)
-$psCommand = 'Get-ChildItem ''HKCU:\Control Panel\NotifyIconSettings'' -EA SilentlyContinue | ForEach-Object { New-ItemProperty -LiteralPath $_.PSPath -Name IsPromoted -PropertyType DWord -Value 1 -Force -EA SilentlyContinue | Out-Null }; New-ItemProperty -Path ''HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer'' -Name EnableAutoTray -PropertyType DWord -Value 0 -Force -EA SilentlyContinue | Out-Null'
+Install-SilentLauncher
+Write-Host "Installed silent launcher to $installDir"
 
-$arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -Command "' + $psCommand + '"'
+# Task runs wscript //B (batch mode) so no script host UI either
+$wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
+$arguments = "//B //Nologo `"$runnerVbs`""
 $argumentsXml = ConvertTo-XmlAttributeValue $arguments
+$commandXml = ConvertTo-XmlAttributeValue $wscript
 
 $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>Keep all notification area icons always visible (IsPromoted=1, EnableAutoTray=0).</Description>
+    <Description>Keep all notification area icons always visible (IsPromoted=1, EnableAutoTray=0). Runs silently via wscript (no console flash).</Description>
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger>
@@ -89,12 +126,12 @@ $taskXml = @"
     <Hidden>true</Hidden>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
     <WakeToRun>false</WakeToRun>
-    <ExecutionTimeLimit>PT5M</ExecutionTimeLimit>
+    <ExecutionTimeLimit>PT1M</ExecutionTimeLimit>
     <Priority>7</Priority>
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>powershell.exe</Command>
+      <Command>$commandXml</Command>
       <Arguments>$argumentsXml</Arguments>
     </Exec>
   </Actions>
@@ -105,14 +142,13 @@ $registered = $false
 $tmpXml = Join-Path $env:TEMP ("{0}.xml" -f $taskName)
 
 try {
-    # Prefer schtasks /XML: Register-ScheduledTask often fails with
-    # "Class not registered" on debloated or partially broken Task Scheduler stacks.
+    & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
     [System.IO.File]::WriteAllText($tmpXml, $taskXml, [System.Text.Encoding]::Unicode)
 
     $create = & schtasks.exe /Create /TN $taskName /XML $tmpXml /F 2>&1
     if ($LASTEXITCODE -eq 0) {
         $registered = $true
-        Write-Host "Scheduled task '$taskName' registered (schtasks)."
+        Write-Host "Scheduled task '$taskName' registered (silent wscript launcher)."
     } else {
         Write-Warning ("schtasks failed: {0}" -f ($create | Out-String).Trim())
     }
@@ -137,9 +173,12 @@ if (-not $registered) {
     exit 1
 }
 
-# Kick once now so the task path is exercised
+# Exercise once (should not flash)
 try {
     & schtasks.exe /Run /TN $taskName 2>&1 | Out-Null
 } catch {}
 
-Write-Host "Done. All tray icons should stay visible across logons."
+# Clean leftover smoke-test task from earlier debugging
+& schtasks.exe /Delete /TN 'GameCache_SmokeTest' /F 2>$null | Out-Null
+
+Write-Host "Done. Tray icons stay visible; task runs with no console window."
