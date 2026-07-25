@@ -1,4 +1,4 @@
-﻿# NeuroBehaviorMonitor.ps1
+# NeuroBehaviorMonitor.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Detects UI manipulation attacks including focus abuse, screen flash stimuli,
 #              topmost window abuse, cursor jitter automation, and color distortion/inversion.
@@ -38,11 +38,13 @@ function Install-Persistence {
     } catch {}
 
     if (-not $installed) {
-        try {
-            schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+        $schOut = & schtasks.exe /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONLOGON /RL HIGHEST /F 2>&1
+        if ($LASTEXITCODE -eq 0) {
             Write-Host "[OK] Persistence installed via schtasks." -ForegroundColor Green
             $installed = $true
-        } catch {}
+        } else {
+            Write-Host "[ERROR] schtasks failed: $schOut" -ForegroundColor Red
+        }
     }
 
     if (-not $installed) { Write-Host "[ERROR] Could not install persistence." -ForegroundColor Red }
@@ -50,13 +52,12 @@ function Install-Persistence {
 }
 
 function Uninstall-Persistence {
-    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
-    if ($task) {
-        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
-        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    } else {
-        schtasks /Delete /TN "$($Script:TaskName)" /F 2>&1 | Out-Null
-    }
+    try {
+        $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+        if ($task -and $task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        if ($task) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue }
+    } catch {}
+    & schtasks.exe /Delete /TN "$($Script:TaskName)" /F 2>$null | Out-Null
     $dest = Join-Path $Script:InstallDir $Script:ScriptName
     if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
     if (Test-Path $Script:InstallDir) { Remove-Item $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue }

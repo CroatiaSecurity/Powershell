@@ -48,6 +48,7 @@ function Install-Persistence {
             $result = cmd /c $cmd 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "[OK] KeyScrambler persistence installed via schtasks fallback." -ForegroundColor Green
+                $installed = $true
             } else {
                 Write-Host "[ERROR] schtasks fallback failed: $result" -ForegroundColor Red
             }
@@ -59,11 +60,12 @@ function Install-Persistence {
 }
 
 function Uninstall-Persistence {
-    $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
-    if ($task) {
-        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
-        Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false
-    }
+    try {
+        $task = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
+        if ($task -and $task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
+        if ($task) { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue }
+    } catch {}
+    & schtasks.exe /Delete /TN "$($Script:TaskName)" /F 2>$null | Out-Null
     $dest = Join-Path $Script:InstallDir $Script:ScriptName
     if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
     Write-Host "[OK] KeyScrambler uninstalled." -ForegroundColor Green

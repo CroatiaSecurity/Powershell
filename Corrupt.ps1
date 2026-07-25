@@ -1,4 +1,4 @@
-# Corrupt.ps1
+﻿# Corrupt.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Anti-telemetry script that overwrites telemetry/tracking files from Microsoft,
 #              NVIDIA, Google, Adobe, Intel, AMD, Steam, Epic, Discord, and other vendors with
@@ -45,6 +45,7 @@ function Install-Persistence {
             $result = cmd /c $cmd 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "Scheduled task '$($Script:TaskName)' registered via schtasks.exe fallback."
+                $installed = $true
             } else {
                 Write-Host "schtasks fallback failed: $result"
             }
@@ -57,7 +58,8 @@ function Install-Persistence {
 }
 
 function Uninstall-Persistence {
-    Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    try { Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+    & schtasks.exe /Delete /TN "$($Script:TaskName)" /F 2>$null | Out-Null
     if (Test-Path $Script:InstallDir) {
         Remove-Item -Path $Script:InstallDir -Recurse -Force -ErrorAction SilentlyContinue
     }

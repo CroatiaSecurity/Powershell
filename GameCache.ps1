@@ -42,8 +42,12 @@ $Config = @{
 $script:CachedDriveConfig = $null
 
 function Test-GameCacheInstalled {
-    $task = Get-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
-    return $null -ne $task
+    try {
+        $task = Get-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
+        if ($null -ne $task) { return $true }
+    } catch {}
+    $query = & schtasks.exe /Query /TN $Config.TaskName 2>$null
+    return ($LASTEXITCODE -eq 0 -and $query)
 }
 
 function Install-GameCacheService {
@@ -59,65 +63,76 @@ function Install-GameCacheService {
     Copy-Item -Path $PSCommandPath -Destination $installedScriptPath -Force
     Write-Host "Copied script to $installedScriptPath" -ForegroundColor Gray
     
-    # Remove existing task if present
-    $existingTask = Get-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
-    if ($existingTask) {
-        Write-Host "Removing existing task..." -ForegroundColor Gray
-        Unregister-ScheduledTask -TaskName $Config.TaskName -Confirm:$false
+    # Remove existing task if present (cmdlets may fail on debloated systems)
+    try {
+        $existingTask = Get-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
+        if ($existingTask) {
+            Write-Host "Removing existing task..." -ForegroundColor Gray
+            Unregister-ScheduledTask -TaskName $Config.TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+    } catch {}
+    & schtasks.exe /Delete /TN $Config.TaskName /F 2>$null | Out-Null
+
+    $pwshArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$installedScriptPath`""
+    $tr = "powershell.exe $pwshArgs"
+    $installed = $false
+
+    # Prefer schtasks: ScheduledTasks CIM often fails with "Class not registered"
+    $create = & schtasks.exe /Create /TN $Config.TaskName /TR $tr /SC ONSTART /RU SYSTEM /RL HIGHEST /F 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        $installed = $true
+    } else {
+        try {
+            $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument $pwshArgs
+            $trigger = New-ScheduledTaskTrigger -AtStartup
+            $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+                -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+            Register-ScheduledTask -TaskName $Config.TaskName `
+                -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
+                -Description "GameCache - Multi-tier caching system for gaming performance (Author: Gorstak)" -Force | Out-Null
+            $installed = $true
+        } catch {
+            Write-Host "[ERROR] Could not register task: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "schtasks output: $create" -ForegroundColor Red
+            exit 1
+        }
     }
-    
-    # Create task action
-    $action = New-ScheduledTaskAction -Execute "PowerShell.exe" `
-        -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$installedScriptPath`""
-    
-    # Create task trigger (at startup)
-    $trigger = New-ScheduledTaskTrigger -AtStartup
-    
-    # Create task principal (run as SYSTEM)
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    
-    # Create task settings
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-        -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-    
-    # Register the task
-    Register-ScheduledTask -TaskName $Config.TaskName `
-        -Action $action `
-        -Trigger $trigger `
-        -Principal $principal `
-        -Settings $settings `
-        -Description "GameCache - Multi-tier caching system for gaming performance (Author: Gorstak)" | Out-Null
-    
+
     Write-Host ""
     Write-Host "[SUCCESS] GameCache installed successfully!" -ForegroundColor Green
-    
+
     Write-Host "Starting GameCache service..." -ForegroundColor Cyan
-    Start-ScheduledTask -TaskName $Config.TaskName
+    try { Start-ScheduledTask -TaskName $Config.TaskName -ErrorAction Stop } catch {
+        & schtasks.exe /Run /TN $Config.TaskName 2>$null | Out-Null
+    }
     Start-Sleep -Seconds 2
-    
+
     Write-Host "Service started! Check log at: $($Config.LogPath)" -ForegroundColor Green
     Write-Host ""
-    
+
     exit 0
 }
 
 function Uninstall-GameCacheService {
     Write-Host "Uninstalling GameCache..." -ForegroundColor Cyan
     
-    # Stop task if running
-    $runningTask = Get-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
-    if ($runningTask -and $runningTask.State -eq "Running") {
-        Write-Host "Stopping running task..." -ForegroundColor Gray
-        Stop-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 2
-    }
-    
-    # Remove task
-    $existingTask = Get-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
-    if ($existingTask) {
-        Unregister-ScheduledTask -TaskName $Config.TaskName -Confirm:$false
-        Write-Host "Task removed." -ForegroundColor Gray
-    }
+    # Stop/remove task (cmdlets may be unavailable on debloated systems)
+    try {
+        $runningTask = Get-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
+        if ($runningTask -and $runningTask.State -eq "Running") {
+            Write-Host "Stopping running task..." -ForegroundColor Gray
+            Stop-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+        }
+        $existingTask = Get-ScheduledTask -TaskName $Config.TaskName -ErrorAction SilentlyContinue
+        if ($existingTask) {
+            Unregister-ScheduledTask -TaskName $Config.TaskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+    } catch {}
+    & schtasks.exe /End /TN $Config.TaskName 2>$null | Out-Null
+    & schtasks.exe /Delete /TN $Config.TaskName /F 2>$null | Out-Null
+    Write-Host "Task removed." -ForegroundColor Gray
     
     # Clean up installation directory
     if (Test-Path $Config.InstallPath) {
@@ -216,7 +231,7 @@ function Get-DriveConfiguration {
     catch {
         Write-Log "Warning: Could not detect drive types, assuming C: is SSD" -Level "WARN"
         # Fallback to simple detection
-        $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Name -match '^[A-Z]$' } | ForEach-Object {$' } | ForEach-Object {
+        $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Name -match '^[A-Z]$' } | ForEach-Object {
             [PSCustomObject]@{
                 DriveLetter = $_.Name
                 MediaType = if ($_.Name -eq 'C') { 'SSD' } else { 'HDD' }

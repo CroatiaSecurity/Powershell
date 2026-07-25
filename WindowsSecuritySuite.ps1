@@ -76,10 +76,11 @@ function Uninstall-SecuritySuite {
         Unregister-ScheduledTask -TaskName "VulnPatcher" -Confirm:$false -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName $passwordTaskName -Confirm:$false -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName $keyScramblerTaskName -Confirm:$false -ErrorAction SilentlyContinue
-        Log "Removed all scheduled tasks"
-    } catch {
-        Log "Failed to remove some scheduled tasks: $_"
+    } catch {}
+    foreach ($tn in @($taskName, 'VulnPatcher', $passwordTaskName, $keyScramblerTaskName)) {
+        & schtasks.exe /Delete /TN $tn /F 2>$null | Out-Null
     }
+    Log "Removed all scheduled tasks"
     
     try {
         Set-LocalUser -Name $env:USERNAME -Password (ConvertTo-SecureString "" -AsPlainText -Force) -ErrorAction SilentlyContinue
@@ -512,23 +513,29 @@ try {
     Copy-Item -Path $MyInvocation.MyCommand.Path -Destination $scriptPath -Force -ErrorAction Stop
     Log "Script copied to: $scriptPath"
     
-    # Create scheduled task
-    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    if ($existingTask) {
-        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    # Create scheduled task (schtasks-first: ScheduledTasks CIM often fails with "Class not registered")
+    try {
+        $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        if ($existingTask) {
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+    } catch {}
+    & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+
+    $tr = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
+    $create = & schtasks.exe /Create /TN $taskName /TR $tr /SC ONLOGON /RU SYSTEM /RL HIGHEST /F 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Log "Scheduled task registered successfully (schtasks)"
+    } else {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+            -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $taskDescription
+        Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction Stop | Out-Null
+        Log "Scheduled task registered successfully"
     }
-    
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-        -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
-    
-    $trigger = New-ScheduledTaskTrigger -AtLogOn
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-    
-    $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description $taskDescription
-    Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction Stop | Out-Null
-    
-    Log "Scheduled task registered successfully"
 } catch {
     Log "Failed to register scheduled task: $_"
 }
@@ -610,22 +617,28 @@ while (`$true) {
     $passwordMainScript | Set-Content -Path $passwordRotationPath -Force -ErrorAction Stop
     
     # Create scheduled task for password rotation at logon
-    $existingPasswordTask = Get-ScheduledTask -TaskName $passwordTaskName -ErrorAction SilentlyContinue
-    if ($existingPasswordTask) {
-        Unregister-ScheduledTask -TaskName $passwordTaskName -Confirm:$false -ErrorAction SilentlyContinue
+    try {
+        $existingPasswordTask = Get-ScheduledTask -TaskName $passwordTaskName -ErrorAction SilentlyContinue
+        if ($existingPasswordTask) {
+            Unregister-ScheduledTask -TaskName $passwordTaskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+    } catch {}
+    & schtasks.exe /Delete /TN $passwordTaskName /F 2>$null | Out-Null
+
+    $passwordTr = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$passwordRotationPath`""
+    $createPw = & schtasks.exe /Create /TN $passwordTaskName /TR $passwordTr /SC ONLOGON /RU SYSTEM /RL HIGHEST /F 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Log "Password rotation configured successfully (schtasks)"
+    } else {
+        $passwordAction = New-ScheduledTaskAction -Execute "powershell.exe" `
+            -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$passwordRotationPath`""
+        $passwordTrigger = New-ScheduledTaskTrigger -AtLogOn
+        $passwordPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $passwordSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        $passwordTask = New-ScheduledTask -Action $passwordAction -Trigger $passwordTrigger -Principal $passwordPrincipal -Settings $passwordSettings -Description "Password rotation every 10 minutes"
+        Register-ScheduledTask -TaskName $passwordTaskName -InputObject $passwordTask -Force -ErrorAction Stop | Out-Null
+        Log "Password rotation configured successfully"
     }
-    
-    $passwordAction = New-ScheduledTaskAction -Execute "powershell.exe" `
-        -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$passwordRotationPath`""
-    
-    $passwordTrigger = New-ScheduledTaskTrigger -AtLogOn
-    $passwordPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $passwordSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-    
-    $passwordTask = New-ScheduledTask -Action $passwordAction -Trigger $passwordTrigger -Principal $passwordPrincipal -Settings $passwordSettings -Description "Password rotation every 10 minutes"
-    Register-ScheduledTask -TaskName $passwordTaskName -InputObject $passwordTask -Force -ErrorAction Stop | Out-Null
-    
-    Log "Password rotation configured successfully"
 } catch {
     Log "Failed to configure password rotation: $_"
 }
@@ -796,22 +809,28 @@ catch {
     Log "Created KeyScrambler script at: $KeyScramblerPath"
     
     # Create scheduled task for KeyScrambler at logon
-    $existingKeyScramblerTask = Get-ScheduledTask -TaskName $keyScramblerTaskName -ErrorAction SilentlyContinue
-    if ($existingKeyScramblerTask) {
-        Unregister-ScheduledTask -TaskName $keyScramblerTaskName -Confirm:$false -ErrorAction SilentlyContinue
+    try {
+        $existingKeyScramblerTask = Get-ScheduledTask -TaskName $keyScramblerTaskName -ErrorAction SilentlyContinue
+        if ($existingKeyScramblerTask) {
+            Unregister-ScheduledTask -TaskName $keyScramblerTaskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+    } catch {}
+    & schtasks.exe /Delete /TN $keyScramblerTaskName /F 2>$null | Out-Null
+
+    $keyScramblerTr = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$KeyScramblerPath`""
+    $createKs = & schtasks.exe /Create /TN $keyScramblerTaskName /TR $keyScramblerTr /SC ONLOGON /RU SYSTEM /RL HIGHEST /F 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Log "KeyScrambler configured successfully (schtasks)"
+    } else {
+        $keyScramblerAction = New-ScheduledTaskAction -Execute "powershell.exe" `
+            -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$KeyScramblerPath`""
+        $keyScramblerTrigger = New-ScheduledTaskTrigger -AtLogOn
+        $keyScramblerPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+        $keyScramblerSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        $keyScramblerTask = New-ScheduledTask -Action $keyScramblerAction -Trigger $keyScramblerTrigger -Principal $keyScramblerPrincipal -Settings $keyScramblerSettings -Description "KeyScrambler anti-keylogger protection"
+        Register-ScheduledTask -TaskName $keyScramblerTaskName -InputObject $keyScramblerTask -Force -ErrorAction Stop | Out-Null
+        Log "KeyScrambler configured successfully"
     }
-    
-    $keyScramblerAction = New-ScheduledTaskAction -Execute "powershell.exe" `
-        -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$KeyScramblerPath`""
-    
-    $keyScramblerTrigger = New-ScheduledTaskTrigger -AtLogOn
-    $keyScramblerPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $keyScramblerSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-    
-    $keyScramblerTask = New-ScheduledTask -Action $keyScramblerAction -Trigger $keyScramblerTrigger -Principal $keyScramblerPrincipal -Settings $keyScramblerSettings -Description "KeyScrambler anti-keylogger protection"
-    Register-ScheduledTask -TaskName $keyScramblerTaskName -InputObject $keyScramblerTask -Force -ErrorAction Stop | Out-Null
-    
-    Log "KeyScrambler configured successfully"
 } catch {
     Log "Failed to configure KeyScrambler: $_"
 }

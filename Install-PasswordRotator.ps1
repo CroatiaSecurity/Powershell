@@ -119,7 +119,8 @@ function Remove-TasksForUser {
     param([string]$U)
     $s = $U -replace '[^a-zA-Z0-9]', '_'
     @("PasswordRotator-10Min-$s", "PasswordRotator-OnLogoff-$s") | ForEach-Object {
-        Unregister-ScheduledTask -TaskName $_ -Confirm:$false -ErrorAction SilentlyContinue
+        try { Unregister-ScheduledTask -TaskName $_ -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+        & schtasks.exe /Delete /TN $_ /F 2>$null | Out-Null
     }
 }
 
@@ -143,17 +144,32 @@ switch ($Mode) {
         Remove-TasksForUser -U $u
         $safe = $u -replace '[^a-zA-Z0-9]', '_'
         $worker = Join-Path $TargetDir 'Worker.ps1'
-        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+        $trRotate = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$worker`" -Mode Rotate"
+        $trLogoff = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$worker`" -Mode Logoff -Username $u"
+        $tn10 = "PasswordRotator-10Min-$safe"
+        $tnOff = "PasswordRotator-OnLogoff-$safe"
 
-        # Rotation task: every 10 minutes
-        $trigger10 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(10) -RepetitionInterval (New-TimeSpan -Minutes 10) -RepetitionDuration (New-TimeSpan -Days 3650)
-        $action10 = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$worker`" -Mode Rotate"
-        Register-ScheduledTask -TaskName "PasswordRotator-10Min-$safe" -Action $action10 -Trigger $trigger10 -Principal $principal -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable) -Force | Out-Null
+        # Prefer schtasks (ScheduledTasks CIM often fails with "Class not registered")
+        & schtasks.exe /Create /TN $tn10 /TR $trRotate /SC MINUTE /MO 10 /RU SYSTEM /RL HIGHEST /F 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            try {
+                $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+                $trigger10 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(10) -RepetitionInterval (New-TimeSpan -Minutes 10) -RepetitionDuration (New-TimeSpan -Days 3650)
+                $action10 = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$worker`" -Mode Rotate"
+                Register-ScheduledTask -TaskName $tn10 -Action $action10 -Trigger $trigger10 -Principal $principal -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable) -Force | Out-Null
+            } catch { Write-RotatorLog "Failed to register $tn10 : $_" }
+        }
 
-        # Logoff task: blank password so user can log back in
-        $triggerOff = New-ScheduledTaskTrigger -AtLogOff -User $u
-        $actionOff = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$worker`" -Mode Logoff -Username $u"
-        Register-ScheduledTask -TaskName "PasswordRotator-OnLogoff-$safe" -Action $actionOff -Trigger $triggerOff -Principal $principal -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -StartWhenAvailable) -Force | Out-Null
+        # Logoff blanking: no direct schtasks logoff trigger; use session-end via ONIDLE is wrong.
+        # Register via PS if available; otherwise skip (StartupBlank still blanks at next boot).
+        try {
+            $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+            $triggerOff = New-ScheduledTaskTrigger -AtLogOff -User $u
+            $actionOff = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$worker`" -Mode Logoff -Username $u"
+            Register-ScheduledTask -TaskName $tnOff -Action $actionOff -Trigger $triggerOff -Principal $principal -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -StartWhenAvailable) -Force | Out-Null
+        } catch {
+            Write-RotatorLog "OnLogoff task unavailable (will rely on StartupBlank): $_"
+        }
 
         # Enforce UAC policy on every logon (in case something reset it)
         Set-UACBlockBlankPasswords
@@ -182,9 +198,7 @@ switch ($Mode) {
         if ($Username) {
             Set-UserPasswordBlank -N $Username
             Write-RotatorLog "Password blanked at logoff for $Username"
-            $s = $Username -replace '[^a-zA-Z0-9]', '_'
-            Unregister-ScheduledTask -TaskName "PasswordRotator-10Min-$s" -Confirm:$false -ErrorAction SilentlyContinue
-            Unregister-ScheduledTask -TaskName "PasswordRotator-OnLogoff-$s" -Confirm:$false -ErrorAction SilentlyContinue
+            Remove-TasksForUser -U $Username
         }
     }
     'StartupBlank' {
@@ -202,6 +216,56 @@ switch ($Mode) {
 }
 '@
 
+# ========================= Task helpers (schtasks-first for debloated systems) =========================
+function Register-PasswordRotatorTask {
+    param(
+        [Parameter(Mandatory)][string]$TaskName,
+        [Parameter(Mandatory)][string]$Tr,
+        [Parameter(Mandatory)][ValidateSet('ONLOGON','ONSTART')][string]$Schedule
+    )
+    & schtasks.exe /Delete /TN $TaskName /F 2>$null | Out-Null
+    $create = & schtasks.exe /Create /TN $TaskName /TR $Tr /SC $Schedule /RU SYSTEM /RL HIGHEST /F 2>&1
+    if ($LASTEXITCODE -eq 0) { return $true }
+
+    # Fallback when schtasks fails but ScheduledTasks CIM works
+    try {
+        $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ($Tr -replace '^powershell\.exe\s+', '')
+        if ($Schedule -eq 'ONLOGON') {
+            $trigger = New-ScheduledTaskTrigger -AtLogOn
+        } else {
+            $trigger = New-ScheduledTaskTrigger -AtStartup
+        }
+        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
+        return $true
+    } catch {
+        Write-Warning "Failed to register task '$TaskName': $create / $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Remove-PasswordRotatorTasks {
+    try {
+        Unregister-ScheduledTask -TaskName $OnLogonTaskName -Confirm:$false -ErrorAction SilentlyContinue
+        Get-ScheduledTask -TaskPath '\' -ErrorAction SilentlyContinue |
+            Where-Object { $_.TaskName -like 'PasswordRotator-*' } |
+            Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+    } catch {}
+    foreach ($tn in @($OnLogonTaskName, 'PasswordRotator-AtStartup')) {
+        & schtasks.exe /Delete /TN $tn /F 2>$null | Out-Null
+    }
+    # Per-user 10Min/OnLogoff tasks created by Worker Logon mode
+    $query = & schtasks.exe /Query /FO CSV /NH 2>$null
+    if ($query) {
+        $query | ForEach-Object {
+            if ($_ -match '"?(PasswordRotator-[^"]+)"?') {
+                & schtasks.exe /Delete /TN $Matches[1] /F 2>$null | Out-Null
+            }
+        }
+    }
+}
+
 # ========================= Install Function =========================
 function Install {
     if (-not (Test-Path $TargetDir)) { New-Item -Path $TargetDir -ItemType Directory -Force | Out-Null }
@@ -211,23 +275,26 @@ function Install {
     # Configure UAC policy immediately
     Set-UACPolicy
 
-    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-
     # Get current user
-    $currentUser = (Get-CimInstance -ClassName Win32_ComputerSystem).UserName
+    $currentUser = $null
+    try {
+        $currentUser = (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).UserName
+    } catch {
+        try { $currentUser = (Get-WmiObject -Class Win32_ComputerSystem -ErrorAction Stop).UserName } catch {}
+    }
+    if (-not $currentUser) { $currentUser = $env:USERNAME }
     if ($currentUser -match '\\') { $currentUser = $currentUser.Split('\')[-1] }
 
-    # Logon task: triggers password rotation setup
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
-    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$workerPath`" -Mode Logon"
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-    Register-ScheduledTask -TaskName $OnLogonTaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
-
-    # Startup task: blanks password before logon screen so user can log in
     $currentUser | Set-Content -Path (Join-Path $TargetDir 'currentuser.txt') -Force -ErrorAction SilentlyContinue
-    $triggerStartup = New-ScheduledTaskTrigger -AtStartup
-    $actionStartup = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$workerPath`" -Mode StartupBlank"
-    Register-ScheduledTask -TaskName 'PasswordRotator-AtStartup' -Action $actionStartup -Trigger $triggerStartup -Principal $principal -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable) -Force | Out-Null
+
+    $logonTr = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$workerPath`" -Mode Logon"
+    $startupTr = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$workerPath`" -Mode StartupBlank"
+
+    $ok1 = Register-PasswordRotatorTask -TaskName $OnLogonTaskName -Tr $logonTr -Schedule ONLOGON
+    $ok2 = Register-PasswordRotatorTask -TaskName 'PasswordRotator-AtStartup' -Tr $startupTr -Schedule ONSTART
+    if (-not ($ok1 -and $ok2)) {
+        throw "Could not register PasswordRotator scheduled tasks (ScheduledTasks CIM and schtasks both failed)."
+    }
 
     # Set initial blank password for current session (will be rotated immediately after logon task fires)
     try {
@@ -242,9 +309,7 @@ function Install {
 
 # ========================= Uninstall Function =========================
 function Uninstall {
-    # Remove all tasks
-    Unregister-ScheduledTask -TaskName $OnLogonTaskName -Confirm:$false -ErrorAction SilentlyContinue
-    Get-ScheduledTask -TaskPath '\' -ErrorAction SilentlyContinue | Where-Object { $_.TaskName -like 'PasswordRotator-*' } | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-PasswordRotatorTasks
 
     # Restore UAC to default (prompt for consent on secure desktop)
     $policyPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'

@@ -1,4 +1,4 @@
-#Requires -RunAsAdministrator
+﻿#Requires -RunAsAdministrator
 # CursorTakeoverDetection.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Samples cursor movement variance to detect automated/takeover patterns.
@@ -56,6 +56,7 @@ function Install-Persistence {
             $result = cmd /c $cmd 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-Host "[OK] $($Script:ServiceConfig.TaskName) installed via schtasks.exe fallback." -ForegroundColor Green
+                $installed = $true
             } else {
                 Write-Host "[ERROR] schtasks fallback failed: $result" -ForegroundColor Red
             }
@@ -67,12 +68,13 @@ function Install-Persistence {
 }
 
 function Uninstall-Persistence {
-    $task = Get-ScheduledTask -TaskName $Script:ServiceConfig.TaskName -ErrorAction SilentlyContinue
-    if ($task) {
-        if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:ServiceConfig.TaskName -ErrorAction SilentlyContinue }
-        Unregister-ScheduledTask -TaskName $Script:ServiceConfig.TaskName -Confirm:$false
-        Write-Host "Task removed." -ForegroundColor Gray
-    }
+    try {
+        $task = Get-ScheduledTask -TaskName $Script:ServiceConfig.TaskName -ErrorAction SilentlyContinue
+        if ($task -and $task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:ServiceConfig.TaskName -ErrorAction SilentlyContinue }
+        if ($task) { Unregister-ScheduledTask -TaskName $Script:ServiceConfig.TaskName -Confirm:$false -ErrorAction SilentlyContinue }
+    } catch {}
+    & schtasks.exe /Delete /TN "$($Script:ServiceConfig.TaskName)" /F 2>$null | Out-Null
+    Write-Host "Task removed." -ForegroundColor Gray
     $dest = Join-Path $Script:ServiceConfig.InstallDir $Script:ServiceConfig.ScriptName
     if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
     Write-Host "[OK] $($Script:ServiceConfig.TaskName) uninstalled." -ForegroundColor Green
