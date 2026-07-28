@@ -88,9 +88,11 @@ function Uninstall-Persistence {
         if ($task.State -eq "Running") { Stop-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue }
         Unregister-ScheduledTask -TaskName $Script:TaskName -Confirm:$false -ErrorAction SilentlyContinue
         Write-Log "Task removed via cmdlet."
-    } 
-    & schtasks.exe /Delete /TN "$($Script:TaskName)" /F 2>$null | Out-Null
-    Write-Log "Task removed."
+    } else {
+        # Fallback to schtasks
+        schtasks /Delete /TN "$($Script:TaskName)" /F 2>&1 | Out-Null
+        Write-Log "Task removed via schtasks."
+    }
     $dest = Join-Path $Script:InstallDir $Script:ScriptName
     if (Test-Path $dest) { Remove-Item $dest -Force -ErrorAction SilentlyContinue }
     Write-Log "[OK] LNKProtection uninstalled."
