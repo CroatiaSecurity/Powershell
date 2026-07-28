@@ -19,7 +19,8 @@
 #
 
 param(
-    [string]$RootPath        = $PSScriptRoot,
+    # Repo root when this script lives under Tools\; else script directory
+    [string]$RootPath        = $(if ($PSScriptRoot -and ((Split-Path $PSScriptRoot -Leaf) -eq 'Tools')) { Split-Path $PSScriptRoot -Parent } else { $PSScriptRoot }),
     [string[]]$ProjectFilter = @()
 )
 

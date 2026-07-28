@@ -1,10 +1,10 @@
 ﻿#Requires -RunAsAdministrator
-# FakeUacDetection.ps1
+# CursorTakeoverDetection.ps1
 # Author: Gorstak (gorstak.eu)
-# Description: Detects possible fake UAC/system dialog windows by scanning process window
-#              titles for keywords like "user account control", "windows security", etc.
-#              Excludes trusted system processes. Persistent via scheduled task.
-# Window-title heuristics for possible fake system/UAC dialogs. High false-positive rate.
+# Description: Samples cursor movement variance to detect automated/takeover patterns.
+#              Uses velocity variance analysis -- low variance + movement indicates bot control.
+#              Persistent via scheduled task (cmdlet + schtasks fallback).
+# Samples cursor movement variance (rough heuristic for automation/takeover). No kernel input capture.
 
 param(
     [hashtable]$ModuleConfig,
@@ -14,9 +14,10 @@ param(
 
 # -- Persistence ------------------------------------------------
 $Script:ServiceConfig = @{
-    TaskName    = "FakeUacDetection"
+    TaskName    = "CursorTakeoverDetection"
     InstallDir  = "C:\ProgramData\Antivirus"
-    ScriptName  = "FakeUacDetection.ps1"
+    ScriptName  = "CursorTakeoverDetection.ps1"
+    IntervalMin = 5
 }
 
 function Install-Persistence {
@@ -41,7 +42,7 @@ function Install-Persistence {
 
         Register-ScheduledTask -TaskName $Script:ServiceConfig.TaskName `
             -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
-            -Description "Fake UAC dialog detection monitor (Gorstak)" | Out-Null
+            -Description "Cursor takeover detection monitor (Gorstak)" | Out-Null
         Write-Host "[OK] $($Script:ServiceConfig.TaskName) installed via Register-ScheduledTask." -ForegroundColor Green
         $installed = $true
     } catch {
@@ -84,7 +85,11 @@ if ($Install)   { Install-Persistence }
 if ($Uninstall) { Uninstall-Persistence }
 
 # -- Logging ----------------------------------------------------
+# Resolve Bin relative to repo root (parent of Detection/), same depth as when scripts lived flat
 $AgentsAvBin = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\Bin'))
+if (-not (Test-Path $AgentsAvBin)) {
+    $AgentsAvBin = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\Bin'))
+}
 $jobLogPath = Join-Path $AgentsAvBin '_JobLog.ps1'
 if (Test-Path $jobLogPath) {
     . $jobLogPath
@@ -99,40 +104,54 @@ if (Test-Path $jobLogPath) {
 }
 
 # -- Detection --------------------------------------------------
-function Invoke-FakeUacDetection {
+function Invoke-CursorTakeoverDetection {
     try {
-        $susPatterns = @("user account control","do you want to allow","windows security","microsoft defender","critical update","windows update")
-        $trusted = @("consent","explorer","dwm","applicationframehost","securityhealthservice","msmpeng")
-        $procs = Get-Process -ErrorAction SilentlyContinue
-        foreach ($p in $procs) {
-            try {
-                if (-not $p.MainWindowTitle) { continue }
-                $name = ($p.ProcessName | Out-String).Trim().ToLowerInvariant()
-                if ($trusted -contains $name) { continue }
-                $title = $p.MainWindowTitle.ToLowerInvariant()
-                $hits = 0
-                foreach ($pat in $susPatterns) { if ($title -like "*$pat*") { $hits++ } }
-                if ($hits -ge 1) {
-                    Write-JobLog "Possible fake UAC/system dialog: $($p.ProcessName) (PID: $($p.Id)) | $($p.MainWindowTitle)" "THREAT" "user_protection.log"
+        Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class CursorProbe {
+    [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; }
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT lpPoint);
+}
+"@ -ErrorAction SilentlyContinue
+        if (-not $script:CursorSamples) { $script:CursorSamples = New-Object System.Collections.ArrayList }
+        $pt = New-Object CursorProbe+POINT
+        if ([CursorProbe]::GetCursorPos([ref]$pt)) {
+            $now = Get-Date
+            [void]$script:CursorSamples.Add([pscustomobject]@{ X = $pt.X; Y = $pt.Y; T = $now })
+            while ($script:CursorSamples.Count -gt 20) { $script:CursorSamples.RemoveAt(0) }
+            if ($script:CursorSamples.Count -ge 12) {
+                $deltas = @()
+                for ($i=1; $i -lt $script:CursorSamples.Count; $i++) {
+                    $a = $script:CursorSamples[$i-1]; $b = $script:CursorSamples[$i]
+                    $dt = [Math]::Max((($b.T - $a.T).TotalMilliseconds),1)
+                    $v = [Math]::Sqrt((($b.X-$a.X)*($b.X-$a.X))+(($b.Y-$a.Y)*($b.Y-$a.Y))) / $dt
+                    $deltas += $v
                 }
-            } catch {}
+                $mean = ($deltas | Measure-Object -Average).Average
+                $var = 0.0; foreach($d in $deltas){ $var += [Math]::Pow(($d-$mean),2) }; $var = $var / [Math]::Max($deltas.Count,1)
+                if ($var -lt 0.005 -and $mean -gt 0.01) {
+                    Write-JobLog "Possible cursor takeover / automated movement detected" "WARNING" "user_protection.log"
+                }
+            }
         }
     } catch {
-        Write-JobLog "FakeUacDetection error: $_" "ERROR" "user_protection.log"
+        Write-JobLog "CursorTakeoverDetection error: $_" "ERROR" "user_protection.log"
     }
 }
 
 # -- Main loop --------------------------------------------------
 if ($MyInvocation.InvocationName -ne '.') {
+    # When dot-sourced, just expose the function. When run directly, check if from scheduled task.
     $installedDir = $Script:ServiceConfig.InstallDir
     if ($PSCommandPath -and $PSCommandPath.StartsWith($installedDir, [System.StringComparison]::OrdinalIgnoreCase)) {
         while ($true) {
-            Invoke-FakeUacDetection
-            Start-Sleep -Seconds 10
+            Invoke-CursorTakeoverDetection
+            Start-Sleep -Seconds 3
         }
     } else {
         # First run: install persistence and do a single check, then exit
-        Invoke-FakeUacDetection
-        Write-Host "[OK] FakeUacDetection installed. Monitor runs via scheduled task." -ForegroundColor Green
+        Invoke-CursorTakeoverDetection
+        Write-Host "[OK] CursorTakeoverDetection installed. Monitor runs via scheduled task." -ForegroundColor Green
     }
 }
