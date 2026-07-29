@@ -1,0 +1,3 @@
+if ($file.Extension -eq '.dll' -or ($file.Extension -eq '.exe' -and ($file.DirectoryName -like "C:\Users*" -or $file.DirectoryName -like "C:\Program Files*" -or $file.DirectoryName -like "C:\Program Files (x86)*"))) {
+    # existing handling logic...
+}

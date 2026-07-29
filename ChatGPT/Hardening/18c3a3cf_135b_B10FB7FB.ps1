@@ -1,0 +1,7 @@
+# === MODULE: EDR ===
+# <EDR CODE HERE>
+# === END MODULE ===
+
+# === MODULE: HARDENING ===
+# <HARDENING CODE HERE>
+# === END MODULE ===

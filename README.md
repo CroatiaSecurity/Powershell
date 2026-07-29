@@ -27,6 +27,7 @@ Windows PowerShell packs for security, EDR, detection, credentials, networking, 
 | **Retaliate/** | Aggressive response helpers (use carefully) |
 | **Tools/** | Repo build/clone/push, GFetch, cert export, login fix, GKodi |
 | **Grok/** | Historical / alternate script variants recovered from Grok exports |
+| **ChatGPT/** | Script variants recovered from ChatGPT data export (code fences + uploads) |
 
 ---
 
@@ -96,5 +97,6 @@ Get-Command -CommandType Function | Measure-Object
 | Repo / folder | Role |
 |---------------|------|
 | `D:\Gorstak\Registry` | Sorted `.reg` packs (Policies, Security, Privacy, Network, …) |
-| `D:\Gorstak\Powershell\Grok\` | Export variants / historical copies |
+| `D:\Gorstak\Powershell\Grok\` | Export variants / historical copies (Grok web) |
+| `D:\Gorstak\Powershell\ChatGPT\` | Export variants / historical copies (ChatGPT) |
 | GitHub `CroatiaSecurity/Powershell` | Remote for this tree |
