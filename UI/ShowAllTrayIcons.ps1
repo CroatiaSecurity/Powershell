@@ -51,7 +51,7 @@ function Install-Win11 {
 
     $psArgs = "-WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command `"$promoteCmd`""
 
-    # Logon + PT1M — same schedule as unattend ShowAllTrayIcons.xml
+    # Logon + PT1M - same schedule as unattend ShowAllTrayIcons.xml
     $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -109,7 +109,7 @@ function Install-Win11 {
             return
         }
         schtasks.exe /Run /TN $taskName 2>$null | Out-Null
-        Write-Output "Windows 11: task '$taskName' — logon, every 1 min, IsPromoted=1"
+        Write-Output "Windows 11: task '$taskName' - logon, every 1 min, IsPromoted=1"
     } finally {
         Remove-Item -LiteralPath $tmpXml -Force -ErrorAction SilentlyContinue
     }
