@@ -1,5 +1,5 @@
 # CosmicClean.ps1 - Aggressive One-Time Cleanup & Scan
-# Terminates suspicious processes, blocks connections, quarantines files — and exits.
+# Terminates suspicious processes, blocks connections, quarantines files - and exits.
 
 # === CONFIG ===
 $LogPath = "C:\CosmicClean.log"

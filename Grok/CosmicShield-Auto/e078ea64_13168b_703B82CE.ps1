@@ -3,7 +3,7 @@
 # Runs continuously, monitoring system-wide (all users) as SYSTEM.
 # Auto-terminates suspicious processes, blocks net connections, quarantines files and DLLs.
 # ENHANCED: Detects high-CPU DLLs with network activity, whitelists .ps1/.bat/.exe in C:\Users/Program Files/Games.
-# WARNING: High-risk—auto-actions can disrupt system (esp. DLL moves). Test in VM. Logs to C:\CosmicShield.log.
+# WARNING: High-risk-auto-actions can disrupt system (esp. DLL moves). Test in VM. Logs to C:\CosmicShield.log.
 # To deploy: Save as .ps1, use Task Scheduler to run as SYSTEM (highest privs, hidden).
 
 # Set paths

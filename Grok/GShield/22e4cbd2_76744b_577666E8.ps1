@@ -563,8 +563,8 @@ public class KeyScrambler
         if (_hookID == IntPtr.Zero)
             throw new Exception("Hook failed: " + Marshal.GetLastWin32Error());
 
-        Console.WriteLine("KeyScrambler ACTIVE — invisible mode ON");
-        Console.WriteLine("You see only your real typing • Keyloggers blinded");
+        Console.WriteLine("KeyScrambler ACTIVE - invisible mode ON");
+        Console.WriteLine("You see only your real typing * Keyloggers blinded");
 
         MSG msg;
         while (GetMessage(out msg, IntPtr.Zero, 0, 0))
@@ -1262,7 +1262,7 @@ function Do-Quarantine($file, $reason) {
     try {
         Copy-Item $file $bak -Force -ErrorAction Stop
         Move-Item $file $q   -Force -ErrorAction Stop
-        Log "QUARANTINED [$reason]: $file → $q"
+        Log "QUARANTINED [$reason]: $file -> $q"
     } catch {
         Log "QUARANTINE FAILED [$reason]: $file - $_"
         if (Set-FileOwnershipAndPermissions $file) {
@@ -1413,7 +1413,7 @@ function Decide-And-Act($file) {
     if (Query-CymruMHR($sha256)) {
         $scannedFiles[$sha256] = $false
         "$sha256,false" | Out-File -FilePath $Database -Append -Encoding UTF8
-        Do-Quarantine $file "Cymru MHR match (≥60% AVs)"
+        Do-Quarantine $file "Cymru MHR match (>=60% AVs)"
         Send-Alert -Severity "HIGH" -Message "Known malware detected" -Details $file
         return
     }
@@ -1469,7 +1469,7 @@ function Start-MemoryScanner {
                 } | ForEach-Object {
                     & $exe -w $rule -p $_.Id 2>$null
                     if ($LASTEXITCODE -eq 0) {
-                        "$(Get-Date) | YARA HIT → $($_.Name) ($($_.Id))" | Out-File $log -Append
+                        "$(Get-Date) | YARA HIT -> $($_.Name) ($($_.Id))" | Out-File $log -Append
                         if ($using:ProtectedProcessNames -notcontains $_.Name) {
                             Stop-Process $_.Id -Force -ErrorAction SilentlyContinue
                         }
@@ -1504,7 +1504,7 @@ function Start-MemoryScanner {
                     }
                 } catch {}
                 if ($hit) {
-                    "$(Get-Date) | PS MEMORY HIT → $($_.Name) ($($_.Id))" | Out-File $log -Append
+                    "$(Get-Date) | PS MEMORY HIT -> $($_.Name) ($($_.Id))" | Out-File $log -Append
                     if ($using:ProtectedProcessNames -notcontains $_.Name) {
                         Stop-Process $_.Id -Force -ErrorAction SilentlyContinue
                     }
@@ -1525,7 +1525,7 @@ Start-Job -ScriptBlock {
             if (-not $p.Path -or $p.Path -eq '' -or $p.Path -match '\$Unknown\$') { $sus = $true }
             if ($p.Modules | Where-Object { $_.FileName -eq '' -or $_.ModuleName -eq '' }) { $sus = $true }
             if ($sus) {
-                "$([DateTime]::Now) | REFLECTIVE PAYLOAD → $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
+                "$([DateTime]::Now) | REFLECTIVE PAYLOAD -> $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
                 if ($using:ProtectedProcessNames -notcontains $p.Name) {
                     Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
                 }

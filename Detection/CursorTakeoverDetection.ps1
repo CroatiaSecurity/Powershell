@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 # CursorTakeoverDetection.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Samples cursor movement variance to detect automated/takeover patterns.

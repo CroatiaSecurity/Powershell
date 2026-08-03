@@ -25,7 +25,7 @@ $regContent = @"
 Windows Registry Editor Version 5.00
 
 ; Generated from $BatchFilePath by ExtractRegTweaks.ps1
-; https://privacy.sexy — v0.13.8 — Thu, 02 Oct 2025
+; https://privacy.sexy - v0.13.8 - Thu, 02 Oct 2025
 ; Excludes tweaks that break functionality (Phone Link, Sound Recorder, Microsoft Store, System Restore)
 ; WARNING: Script may be truncated; provide full script for complete tweaks
 

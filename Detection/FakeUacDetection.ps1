@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 # FakeUacDetection.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Detects possible fake UAC/system dialog windows by scanning process window

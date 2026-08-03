@@ -92,7 +92,7 @@ function Log($msg) {
 function Deny-Execution($file,$pid,$type) {
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     "$ts | BLOCKED $type | $file | PID $pid" | Out-File $BlockedLog -Append -Encoding ASCII
-    Log "BLOCKED $type → $file (PID $pid)"
+    Log "BLOCKED $type -> $file (PID $pid)"
 
     $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     if ($proc -and $ProtectedNames -contains $proc.ProcessName) {
@@ -2312,9 +2312,9 @@ function Decide-And-Act($file) {
     $ext = [IO.Path]::GetExtension($file).ToLower()
     if ($ext -notin $MonitoredExtensions) { return }
 
-    # Fast allow → skip everything else
+    # Fast allow -> skip everything else
     if (Test-FastAllow $file) {
-        Log "ALLOWED (trusted signature/CIRCL) → $file"
+        Log "ALLOWED (trusted signature/CIRCL) -> $file"
         return
     }
 
@@ -2328,7 +2328,7 @@ function Decide-And-Act($file) {
         }
     }
 
-    Log "ALLOWED (no reputation hit) → $file"
+    Log "ALLOWED (no reputation hit) -> $file"
 }
 
 # ========================== REFLECTIVE / MANUAL-MAP SCANNER (2025 fix) ==========================
@@ -2341,14 +2341,14 @@ Start-Job -Name "ReflectiveScanner" -ScriptBlock {
             $p = $_
             $sus = $false
 
-            # Process has no path on-disk image → hollowed or reflective
+            # Process has no path on-disk image -> hollowed or reflective
             if ([string]::IsNullOrWhiteSpace($p.Path) -or $p.Path -match 'unknown') { $sus = $true }
 
-            # Has modules with empty FileName/ModuleName → manually mapped
+            # Has modules with empty FileName/ModuleName -> manually mapped
             if ($p.Modules | Where-Object [string]::IsNullOrWhiteSpace($_.FileName)) { $sus = $true }
 
             if ($sus -and $using:ProtectedNames -notcontains $p.ProcessName) {
-                "$([DateTime]::Now) | REFLECTIVE/MANUAL-MAP → $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
+                "$([DateTime]::Now) | REFLECTIVE/MANUAL-MAP -> $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
                 Stop-ProcessesUsingFile $p.Id -Force -ErrorAction SilentlyContinue
             }
         }

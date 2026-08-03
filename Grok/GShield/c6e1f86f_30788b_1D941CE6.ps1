@@ -1,4 +1,4 @@
-﻿# Hide the PowerShell console window
+# Hide the PowerShell console window
 $null = Add-Type @"
 using System;
 using System.Runtime.InteropServices;

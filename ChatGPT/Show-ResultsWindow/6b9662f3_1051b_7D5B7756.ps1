@@ -19,7 +19,7 @@ function Show-ResultsWindow {
 
     $button = New-Object Windows.Forms.Button
     $button.Size = '100,30'
-    $button.Text = "📷 Screenshot"
+    $button.Text = " Screenshot"
     $button.Anchor = 'Top,Right'
     $form.Controls.Add($button)
 

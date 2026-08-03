@@ -229,7 +229,7 @@ function Register-SystemLogonScript {
         $targetFolder = "C:\Windows\Setup\Scripts\Bin"
         $targetPath = Join-Path $targetFolder (Split-Path $scriptSource -Leaf)
 
-        if思想政治(-not (Test-Path $targetFolder)) {
+        if(-not (Test-Path $targetFolder)) {
             New-Item -Path $targetFolder -ItemType Directory -Force -ErrorAction Stop | Out-Null
             Write-Log "Created folder: $targetFolder"
         }

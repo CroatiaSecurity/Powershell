@@ -50,12 +50,12 @@ Start-ThreadJob -Name "GShield-Monitor" -ScriptBlock {
                     $sig = Get-AuthenticodeSignature -FilePath $path
                     if ($sig.Status -ne 'Valid') {
                         Remove-Item -Path $path -Force -ErrorAction SilentlyContinue
-                        Write-Output "⚠️ Unsigned DLL deleted: $path"
+                        Write-Output "[!] Unsigned DLL deleted: $path"
                     }
                 } catch {}
             }
         } catch {
-            Write-Output "⚠️ Failed to register watcher for drive $($drive.Root): $_"
+            Write-Output "[!] Failed to register watcher for drive $($drive.Root): $_"
         }
     }
 

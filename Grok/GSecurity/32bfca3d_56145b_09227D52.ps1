@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 # GSecurity.ps1
 # Consolidated Windows security and optimization script
 # Author: Gorstak, optimized by Grok

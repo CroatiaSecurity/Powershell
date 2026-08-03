@@ -48,42 +48,42 @@ $AllowedSIDs = @('S-1-2-0', 'S-1-5-20')
 $RiskyPaths = @('\temp\', '\downloads\', '\appdata\local\temp\', '\public\', '\windows\temp\', '\appdata\roaming\', '\desktop\')
 
 $MonitoredExtensions = @(
-    # Standard executable and script extensions
-    '.exe','.dll','.sys','.ocx','.scr','.com','.cpl','.msi','.drv','.winmd',
-    '.ps1','.bat','.cmd','.vbs','.js','.hta','.jse','.wsf','.wsh','.psc1','.exif',
-   
-    # Extended list (unchanged from original)
-    '.zoo','.zlo','.zfsendtotarget','.z','.xz','.xsl','.xps','.xpi','.xnk','.xml',
-    '.xlw','.xltx','.xltm','.xlt','.xlsx','.xlsm','.xlsb','.xls','.xlm','.xll',
-    '.xld','.xlc','.xlb','.xlam','.xla','.xip','.xbap','.xar','.wwl','.wsc',
-    '.ws','.wll','.wiz','.website','.webpnp','.webloc','.wbk','.was','.vxd',
-    '.vsw','.vst','.vss','.vsmacros','.vhdx','.vhd','.vbp','.vb','.url','.tz',
-    '.txz','.tsp','.tpz','.tool','.tmp','.tlb','.theme','.tgz','.terminal',
-    '.term','.tbz','.taz','.tar','.swf','.stm','.spl','.slk','.sldx',
-    '.sldm','.sit','.shs','.shb','.settingcontent-ms','.search-ms','.searchconnector-ms',
-    '.sea','.sct','.scf','.rtf','.rqy','.rpy','.rev','.reg','.rb',
-    '.rar','.r09','.r08','.r07','.r06','.r05','.r04','.r03','.r02','.r01',
-    '.r00','.pyzw','.pyz','.pyx','.pywz','.pyw','.pyt','.pyp','.pyo','.pyi',
-    '.pyde','.pyd','.pyc','.py3','.py','.pxd','.pstreg','.pst','.psdm1','.psd1',
-    '.prn','.printerexport','.prg','.prf','.pptx','.pptm','.ppt','.ppsx','.ppsm',
-    '.pps','.ppam','.ppa','.potx','.potm','.pot','.plg','.pl','.pkg','.pif',
-    '.pi','.perl','.pcd','.pa','.osd','.oqy','.ops','.one','.ods',
-    '.ntfs','.nsh','.nls','.mydocs','.mui','.msu','.mst','.msp','.mshxml',
-    '.msh2xml','.msh2','.msh1xml','.msh1','.msh','.mof','.mmc','.mhtml','.mht',
-    '.mdz','.mdw','.mdt','.mdn','.mdf','.mde','.mdb','.mda','.mcl','.mcf',
-    '.may','.maw','.mav','.mau','.mat','.mas','.mar','.maq','.mapimail',
-    '.manifest','.mam','.mag','.maf','.mad','.lzh','.local','.library-ms',
-    '.lha','.ldb','.laccdb','.ksh','.job','.jnlp','.jar','.its','.isp','.iso',
-    '.iqy','.ins','.ini','.inf','.img','.ime','.ie','.hwp','.htt','.htm',
-    '.htc','.hpj','.hlp','.hex','.gz','.grp','.glk','.gadget',
-    '.fxp','.fon','.fat','.elf','.ecf','.dqy','.dotx','.dotm',
-    '.dot','.docm','.docb','.doc','.dmg','.dir','.dif','.diagcab',
-    '.desktop','.desklink','.der','.dcr','.db','.csv','.csh','.crx','.crt',
-    '.crazy','.cpx','.command','.cnt','.cnv','.clb',
-    '.class','.cla','.chm','.chi','.cfg','.cer','.cdb','.cab','.bzip2','.bzip',
-    '.bz2','.bz','.bas','.ax','.asx','.aspx','.asp','.asa','.arj',
-    '.arc','.appref-ms','.application','.app','.air','.adp','.adn','.ade',
-    '.ad','.acm','.accdu','.accdt','.accdr','.accde','.accda','.c','.h'
+    # Standard executable and script extensions
+    '.exe','.dll','.sys','.ocx','.scr','.com','.cpl','.msi','.drv','.winmd',
+    '.ps1','.bat','.cmd','.vbs','.js','.hta','.jse','.wsf','.wsh','.psc1','.exif',
+   
+    # Extended list (unchanged from original)
+    '.zoo','.zlo','.zfsendtotarget','.z','.xz','.xsl','.xps','.xpi','.xnk','.xml',
+    '.xlw','.xltx','.xltm','.xlt','.xlsx','.xlsm','.xlsb','.xls','.xlm','.xll',
+    '.xld','.xlc','.xlb','.xlam','.xla','.xip','.xbap','.xar','.wwl','.wsc',
+    '.ws','.wll','.wiz','.website','.webpnp','.webloc','.wbk','.was','.vxd',
+    '.vsw','.vst','.vss','.vsmacros','.vhdx','.vhd','.vbp','.vb','.url','.tz',
+    '.txz','.tsp','.tpz','.tool','.tmp','.tlb','.theme','.tgz','.terminal',
+    '.term','.tbz','.taz','.tar','.swf','.stm','.spl','.slk','.sldx',
+    '.sldm','.sit','.shs','.shb','.settingcontent-ms','.search-ms','.searchconnector-ms',
+    '.sea','.sct','.scf','.rtf','.rqy','.rpy','.rev','.reg','.rb',
+    '.rar','.r09','.r08','.r07','.r06','.r05','.r04','.r03','.r02','.r01',
+    '.r00','.pyzw','.pyz','.pyx','.pywz','.pyw','.pyt','.pyp','.pyo','.pyi',
+    '.pyde','.pyd','.pyc','.py3','.py','.pxd','.pstreg','.pst','.psdm1','.psd1',
+    '.prn','.printerexport','.prg','.prf','.pptx','.pptm','.ppt','.ppsx','.ppsm',
+    '.pps','.ppam','.ppa','.potx','.potm','.pot','.plg','.pl','.pkg','.pif',
+    '.pi','.perl','.pcd','.pa','.osd','.oqy','.ops','.one','.ods',
+    '.ntfs','.nsh','.nls','.mydocs','.mui','.msu','.mst','.msp','.mshxml',
+    '.msh2xml','.msh2','.msh1xml','.msh1','.msh','.mof','.mmc','.mhtml','.mht',
+    '.mdz','.mdw','.mdt','.mdn','.mdf','.mde','.mdb','.mda','.mcl','.mcf',
+    '.may','.maw','.mav','.mau','.mat','.mas','.mar','.maq','.mapimail',
+    '.manifest','.mam','.mag','.maf','.mad','.lzh','.local','.library-ms',
+    '.lha','.ldb','.laccdb','.ksh','.job','.jnlp','.jar','.its','.isp','.iso',
+    '.iqy','.ins','.ini','.inf','.img','.ime','.ie','.hwp','.htt','.htm',
+    '.htc','.hpj','.hlp','.hex','.gz','.grp','.glk','.gadget',
+    '.fxp','.fon','.fat','.elf','.ecf','.dqy','.dotx','.dotm',
+    '.dot','.docm','.docb','.doc','.dmg','.dir','.dif','.diagcab',
+    '.desktop','.desklink','.der','.dcr','.db','.csv','.csh','.crx','.crt',
+    '.crazy','.cpx','.command','.cnt','.cnv','.clb',
+    '.class','.cla','.chm','.chi','.cfg','.cer','.cdb','.cab','.bzip2','.bzip',
+    '.bz2','.bz','.bas','.ax','.asx','.aspx','.asp','.asa','.arj',
+    '.arc','.appref-ms','.application','.app','.air','.adp','.adn','.ade',
+    '.ad','.acm','.accdu','.accdt','.accdr','.accde','.accda','.c','.h'
 )
 
 $ProtectedProcesses = @(

@@ -441,4 +441,4 @@ Write-Host "Dismounting ISO..."
 Dismount-DiskImage -ImagePath $isoPath
 
 Write-Host "Done! New ISO created at $newIsoPath"
-Write-Warning "Test in a VM—aggressive removals may cause instability."
+Write-Warning "Test in a VM-aggressive removals may cause instability."

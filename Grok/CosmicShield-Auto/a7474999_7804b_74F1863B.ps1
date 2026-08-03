@@ -3,7 +3,7 @@
 # Runs continuously, monitoring system-wide (all users) as SYSTEM.
 # Auto-terminates suspicious processes, blocks net connections, quarantines files.
 # FIXED: Quarantine path, user parsing; tuned for action (wider file window, lower threshold).
-# WARNING: High-risk—auto-actions can disrupt system. Test in VM. Logs to C:\CosmicShield.log.
+# WARNING: High-risk-auto-actions can disrupt system. Test in VM. Logs to C:\CosmicShield.log.
 # To deploy: Save as .ps1, use Task Scheduler to run as SYSTEM (highest privs, hidden).
 
 # Set paths

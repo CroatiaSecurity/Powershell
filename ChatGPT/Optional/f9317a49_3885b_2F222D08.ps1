@@ -1,9 +1,9 @@
 <#
-════════════════════════════════════════════════════════════
+============================================================
  NeuroBehaviorMonitor.ps1
  Heuristic detection of manipulative UI behavior
  For integration into GShield-style EDR framework
-════════════════════════════════════════════════════════════
+============================================================
 #>
 
 #region Win32 Imports

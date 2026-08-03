@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 # Pihole.ps1 - System-wide ad blocker for Windows using permanent routes
 # Resolves ad/tracker domains to IPs and blocks them via "route add -p"
 
@@ -123,7 +123,7 @@ function Get-ExistingRouteIPs {
     return $existing
 }
 
-# Resolve domains to IPs — skips domains already routed via DNS cache
+# Resolve domains to IPs - skips domains already routed via DNS cache
 function Resolve-DomainsToIPs {
     param ([System.Collections.Generic.HashSet[string]]$Domains)
 
@@ -155,7 +155,7 @@ function Resolve-DomainsToIPs {
         $domain = $domainList[$i]
 
         if ($dnsCache.ContainsKey($domain)) {
-            # Domain already resolved before — check if IPs are already routed
+            # Domain already resolved before - check if IPs are already routed
             $cachedIPs = $dnsCache[$domain].Split(',') | Where-Object { $_ }
             $allRouted = $true
             foreach ($cip in $cachedIPs) {
@@ -166,14 +166,14 @@ function Resolve-DomainsToIPs {
             }
             if ($allRouted) { $skipped++ } else { $cached++ }
         } else {
-            # Fresh DNS resolution — both IPv4 and IPv6
+            # Fresh DNS resolution - both IPv4 and IPv6
             $domainIPs = @()
             try {
                 $addrs = [System.Net.Dns]::GetHostAddresses($domain)
                 foreach ($addr in $addrs) {
                     $ipStr = $addr.ToString()
                     if ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
-                        # IPv4 — skip private/loopback
+                        # IPv4 - skip private/loopback
                         if (-not $ipStr.StartsWith("127.") -and -not $ipStr.StartsWith("10.") -and
                             -not $ipStr.StartsWith("192.168.") -and -not $ipStr.StartsWith("169.254.") -and
                             -not $ipStr.StartsWith("0.")) {
@@ -182,7 +182,7 @@ function Resolve-DomainsToIPs {
                         }
                     }
                     elseif ($addr.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetworkV6) {
-                        # IPv6 — skip loopback (::1) and link-local (fe80::)
+                        # IPv6 - skip loopback (::1) and link-local (fe80::)
                         if ($ipStr -ne "::1" -and -not $ipStr.StartsWith("fe80:")) {
                             $domainIPs += $ipStr
                             if (-not $existingIPs.ContainsKey($ipStr)) { $newIPs[$ipStr] = $true }
@@ -220,11 +220,11 @@ function Add-PermanentRoutes {
     foreach ($ip in $IPs) {
         try {
             if ($ip.Contains(':')) {
-                # IPv6 — use netsh to add persistent route to black hole (::)
+                # IPv6 - use netsh to add persistent route to black hole (::)
                 $result = & netsh interface ipv6 add route "$ip/128" interface=1 metric=1 2>&1
                 if ($LASTEXITCODE -eq 0) { $added++ } else { $errors++ }
             } else {
-                # IPv4 — route add -p to black hole (0.0.0.0)
+                # IPv4 - route add -p to black hole (0.0.0.0)
                 $result = & route add $ip MASK 255.255.255.255 0.0.0.0 -p 2>&1
                 if ($LASTEXITCODE -eq 0) { $added++ } else { $errors++ }
             }
@@ -258,7 +258,7 @@ function Get-ThreatIPs {
                 $line = $line.Trim()
                 # Skip comments and empty lines
                 if (-not $line -or $line.StartsWith("#") -or $line.StartsWith(";")) { continue }
-                # Extract IP or CIDR — take first token on the line
+                # Extract IP or CIDR - take first token on the line
                 $ip = ($line -split "\s+")[0].Trim()
                 # Match single IPs
                 if ($ip -match "^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$") {
@@ -271,7 +271,7 @@ function Get-ThreatIPs {
                         $count++
                     }
                 }
-                # Match CIDR /24 or smaller — expand to single IP (just block the network address)
+                # Match CIDR /24 or smaller - expand to single IP (just block the network address)
                 elseif ($ip -match "^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/(\d+)$") {
                     $netAddr = $Matches[1]
                     $prefix = [int]$Matches[2]

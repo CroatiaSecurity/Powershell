@@ -1226,7 +1226,7 @@ Start-Job -ScriptBlock {
             } catch {}
             
             if ($hit) {
-                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | PS MEMORY HIT → $($proc.Name) ($($proc.Id))" | Out-File $log -Append
+                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | PS MEMORY HIT -> $($proc.Name) ($($proc.Id))" | Out-File $log -Append
                 
                 if ($proc.Path) {
                     $hashMalicious = Check-FileHash -FilePath $proc.Path -ProcessName $proc.Name -ProcessId $proc.Id
@@ -1283,7 +1283,7 @@ Start-Job -ScriptBlock {
             } catch {}
             
             if ($sus) {
-                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | REFLECTIVE PAYLOAD → $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
+                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | REFLECTIVE PAYLOAD -> $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
                 
                 if ($p.Path) {
                     $hashMalicious = Check-FileHash -FilePath $p.Path -ProcessName $p.Name -ProcessId $p.Id

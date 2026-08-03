@@ -3,7 +3,7 @@
 # Runs continuously, monitoring system-wide (all users) as SYSTEM.
 # Detects if user is surfing (browser) or playing MMO, allows only those connections, blocks all else.
 # Whitelists .ps1/.bat in C:\Users, .exe in Program Files/Games, and update servers.
-# WARNING: High-risk—blocks most network traffic. Test in VM. Logs to C:\CosmicLockdown.log.
+# WARNING: High-risk-blocks most network traffic. Test in VM. Logs to C:\CosmicLockdown.log.
 # To deploy: Save as .ps1, use Task Scheduler to run as SYSTEM (highest privs, hidden).
 
 # Set paths

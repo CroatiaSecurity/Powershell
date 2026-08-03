@@ -11,9 +11,9 @@ $Script:TaskName = "IPSecPolicySetup"
 $Script:InstallDir = "$env:ProgramData\IPSecPolicy"
 $Script:ScriptName = "IPSecPolicy.ps1"
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Persistence (Scheduled Task)
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 function Install-Persistence {
     $dir = $Script:InstallDir
@@ -71,9 +71,9 @@ if ($Uninstall) { Uninstall-Persistence }
 $existingTask = Get-ScheduledTask -TaskName $Script:TaskName -ErrorAction SilentlyContinue
 if (-not $existingTask) { Install-Persistence }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # OS Compatibility Check
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 $os = Get-CimInstance Win32_OperatingSystem
 $edition = $os.Caption
@@ -89,13 +89,13 @@ if ($LASTEXITCODE -ne 0 -and "$testNetsh" -match "not recognized|not found") {
     exit 1
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Port Definitions (structured table)
 # Protocol: TCP, UDP, or TCPUDP (both)
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 $PortDefinitions = @(
-    # ── Legacy / File Transfer ──
+    # -- Legacy / File Transfer --
     @{ Port = 21;    Name = "FTP";              Protocol = "TCP";    Category = "Legacy" }
     @{ Port = 69;    Name = "TFTP";             Protocol = "UDP";    Category = "Legacy" }
     @{ Port = 111;   Name = "RPCBind";          Protocol = "TCPUDP"; Category = "Legacy" }
@@ -106,7 +106,7 @@ $PortDefinitions = @(
     @{ Port = 873;   Name = "rsync";            Protocol = "TCP";    Category = "Legacy" }
     @{ Port = 2049;  Name = "NFS";              Protocol = "TCPUDP"; Category = "Legacy" }
 
-    # ── Remote Access ──
+    # -- Remote Access --
     @{ Port = 22;    Name = "SSH";              Protocol = "TCP";    Category = "Remote Access" }
     @{ Port = 23;    Name = "Telnet";           Protocol = "TCP";    Category = "Remote Access" }
     @{ Port = 3389;  Name = "RDP";              Protocol = "TCPUDP"; Category = "Remote Access" }
@@ -114,29 +114,29 @@ $PortDefinitions = @(
     @{ Port = 5985;  Name = "WinRM_HTTP";       Protocol = "TCP";    Category = "Remote Access" }
     @{ Port = 5986;  Name = "WinRM_HTTPS";      Protocol = "TCP";    Category = "Remote Access" }
 
-    # ── Windows Services ──
+    # -- Windows Services --
     @{ Port = 135;   Name = "RPC_DCOM";         Protocol = "TCPUDP"; Category = "Windows Services" }
     @{ Port = 137;   Name = "NetBIOS_NS";       Protocol = "TCPUDP"; Category = "Windows Services" }
     @{ Port = 138;   Name = "NetBIOS_DGM";      Protocol = "UDP";    Category = "Windows Services" }
     @{ Port = 139;   Name = "NetBIOS_SSN";      Protocol = "TCP";    Category = "Windows Services" }
     @{ Port = 445;   Name = "SMB";              Protocol = "TCP";    Category = "Windows Services" }
 
-    # ── Discovery / Name Resolution ──
-    # NOTE: DNS (53) intentionally NOT blocked — required for internet browsing
+    # -- Discovery / Name Resolution --
+    # NOTE: DNS (53) intentionally NOT blocked - required for internet browsing
     @{ Port = 1900;  Name = "SSDP";             Protocol = "UDP";    Category = "Discovery" }
     @{ Port = 2869;  Name = "UPnP";             Protocol = "TCP";    Category = "Discovery" }
     @{ Port = 5353;  Name = "mDNS";             Protocol = "UDP";    Category = "Discovery" }
     @{ Port = 5355;  Name = "LLMNR";            Protocol = "UDP";    Category = "Discovery" }
 
-    # ── Directory / LDAP ──
+    # -- Directory / LDAP --
     @{ Port = 389;   Name = "LDAP";             Protocol = "TCPUDP"; Category = "Directory" }
     @{ Port = 636;   Name = "LDAPS";            Protocol = "TCP";    Category = "Directory" }
 
-    # ── SNMP ──
+    # -- SNMP --
     @{ Port = 161;   Name = "SNMP";             Protocol = "UDP";    Category = "SNMP" }
     @{ Port = 162;   Name = "SNMP_Trap";        Protocol = "UDP";    Category = "SNMP" }
 
-    # ── Databases ──
+    # -- Databases --
     @{ Port = 1433;  Name = "MSSQL";            Protocol = "TCP";    Category = "Databases" }
     @{ Port = 1434;  Name = "MSSQL_Browser";    Protocol = "UDP";    Category = "Databases" }
     @{ Port = 1521;  Name = "OracleDB";         Protocol = "TCP";    Category = "Databases" }
@@ -148,7 +148,7 @@ $PortDefinitions = @(
     @{ Port = 11211; Name = "Memcached";        Protocol = "TCPUDP"; Category = "Databases" }
     @{ Port = 27017; Name = "MongoDB";          Protocol = "TCP";    Category = "Databases" }
 
-    # ── Container / DevOps ──
+    # -- Container / DevOps --
     @{ Port = 2375;  Name = "Docker_Unenc";     Protocol = "TCP";    Category = "Container/DevOps" }
     @{ Port = 2376;  Name = "Docker_TLS";       Protocol = "TCP";    Category = "Container/DevOps" }
     @{ Port = 5000;  Name = "DockerRegistry";   Protocol = "TCP";    Category = "Container/DevOps" }
@@ -156,16 +156,16 @@ $PortDefinitions = @(
     @{ Port = 9090;  Name = "Prometheus";       Protocol = "TCP";    Category = "Container/DevOps" }
     @{ Port = 50070; Name = "Hadoop_HDFS";      Protocol = "TCP";    Category = "Container/DevOps" }
 
-    # ── Management / RCE vectors ──
+    # -- Management / RCE vectors --
     @{ Port = 1099;  Name = "Java_RMI";         Protocol = "TCP";    Category = "Management" }
     @{ Port = 5601;  Name = "Kibana";           Protocol = "TCP";    Category = "Management" }
     @{ Port = 8888;  Name = "Jupyter";          Protocol = "TCP";    Category = "Management" }
 
-    # ── Proxies ──
+    # -- Proxies --
     @{ Port = 1080;  Name = "SOCKS";            Protocol = "TCP";    Category = "Proxies" }
-    # NOTE: 8080/8443 intentionally NOT blocked — used by many legitimate web services
+    # NOTE: 8080/8443 intentionally NOT blocked - used by many legitimate web services
 
-    # ── Known Malware / Backdoors ──
+    # -- Known Malware / Backdoors --
     @{ Port = 666;   Name = "Trojan_666";       Protocol = "TCP";    Category = "Malware Ports" }
     @{ Port = 1234;  Name = "RAT_1234";         Protocol = "TCP";    Category = "Malware Ports" }
     @{ Port = 1337;  Name = "Backdoor_1337";    Protocol = "TCP";    Category = "Malware Ports" }
@@ -182,9 +182,9 @@ $PortDefinitions = @(
 # Sort by port number
 $PortDefinitions = $PortDefinitions | Sort-Object { $_.Port }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Helper: Run netsh with error checking
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 $Script:ErrorCount = 0
 
@@ -202,9 +202,9 @@ function Invoke-Netsh {
     return $result
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Cleanup: Remove existing policy, rules, filter lists, and filter actions
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 $policyName = "GSecurity"
 
@@ -236,9 +236,9 @@ Invoke-Netsh "ipsec static delete filteraction name=PermitAction" -SilentFail
 
 Write-Host "  Cleanup complete." -ForegroundColor Green
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Create Policy and Filter Action
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 Write-Host "[2/5] Creating policy and filter action..." -ForegroundColor White
 
@@ -250,9 +250,9 @@ Invoke-Netsh "ipsec static add filteraction name=BlockAction action=block descri
 
 Write-Host "  Policy '$policyName' created." -ForegroundColor Green
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Create Filter Lists, Filters, and Rules
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 Write-Host "[3/5] Creating filter lists and rules..." -ForegroundColor White
 
@@ -275,7 +275,7 @@ foreach ($def in $PortDefinitions) {
     if ($category -ne $currentCategory) {
         $currentCategory = $category
         Write-Host ""
-        Write-Host "  ── $category ──" -ForegroundColor DarkCyan
+        Write-Host "  -- $category --" -ForegroundColor DarkCyan
     }
 
     # Determine which protocols to block
@@ -311,18 +311,18 @@ foreach ($def in $PortDefinitions) {
     Write-Host "OK" -ForegroundColor Green
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Assign Policy
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 Write-Host ""
 Write-Host "[4/5] Assigning policy..." -ForegroundColor White
 Invoke-Netsh "ipsec static set policy name=$policyName assign=yes"
 Write-Host "  Policy assigned." -ForegroundColor Green
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Summary
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 Write-Host ""
 Write-Host "[5/5] Summary" -ForegroundColor White
@@ -355,9 +355,9 @@ if ($Script:ErrorCount -gt 0) {
     Write-Host "[!] $($Script:ErrorCount) warnings occurred. Review output above." -ForegroundColor Yellow
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Verification
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 Write-Host ""
 Write-Host "--- Verification ---" -ForegroundColor Gray

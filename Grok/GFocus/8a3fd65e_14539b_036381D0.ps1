@@ -86,7 +86,7 @@ $BrowserProcesses = @(
     'bravesoftware', 'browsex', 'browsec', 'comet', 'elements', 'flashpeak', 'surf'
 )
 
-# Gaming (and all non-browser apps) are never monitored or blocked — explicitly unhindered.
+# Gaming (and all non-browser apps) are never monitored or blocked - explicitly unhindered.
 $GamingProcesses = @(
     'steam', 'steamwebhelper', 'epicgameslauncher', 'origin', 'battle.net', 'eadesktop', 'ea app',
     'ubisoft game launcher', 'gog galaxy', 'rungame', 'gamebar', 'gameservices', 'overwolf'

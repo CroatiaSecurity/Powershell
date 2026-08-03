@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 # AdBlocker.ps1 - System-wide ad blocker for Windows using DNS policy
 # Converted from BlockAds.pac to block ads via DNS redirection to 127.0.0.1
 # Author: Adapted from Gorstak's BlockAds.pac

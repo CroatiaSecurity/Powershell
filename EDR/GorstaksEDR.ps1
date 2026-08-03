@@ -1,4 +1,4 @@
-﻿#Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
     Gorstak EDR - Unified Endpoint Defense Platform (Fully Automatic)
@@ -10,9 +10,9 @@
     Run as Administrator once - will automatically persist.
 #>
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # AUTO-START - Check if we need to install first
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 $Script:IntervalMinutes = 5
 $Script:InstallDir = 'C:\ProgramData\Antivirus'
 $Script:SelfPath = $PSCommandPath
@@ -82,7 +82,7 @@ if (-not $IsRunningFromInstall -and -not (Test-Path $InstalledMarker)) {
         $taskRegistered = $true
         Write-Host "[GorstaksEDR] Scheduled task registered (PS cmdlets) for $CurrentUser" -ForegroundColor Green
     } catch {
-        Write-Host "[GorstaksEDR] PS ScheduledTask failed: $_ — falling back to schtasks.exe" -ForegroundColor Yellow
+        Write-Host "[GorstaksEDR] PS ScheduledTask failed: $_ - falling back to schtasks.exe" -ForegroundColor Yellow
     }
 
     # Attempt 2: schtasks.exe fallback
@@ -98,7 +98,7 @@ if (-not $IsRunningFromInstall -and -not (Test-Path $InstalledMarker)) {
     }
 
     if (-not $taskRegistered) {
-        Write-Host "[GorstaksEDR] WARNING: Could not register persistence — EDR will not auto-start" -ForegroundColor Red
+        Write-Host "[GorstaksEDR] WARNING: Could not register persistence - EDR will not auto-start" -ForegroundColor Red
     }
 
     Write-Host "[GorstaksEDR] Installation complete! Starting EDR..." -ForegroundColor Green
@@ -109,9 +109,9 @@ if (-not $IsRunningFromInstall -and -not (Test-Path $InstalledMarker)) {
     exit
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # If we get here, we're running from install location - start EDR
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 
 # Suppress all output except critical alerts
 $WarningPreference = 'SilentlyContinue'
@@ -119,9 +119,9 @@ $InformationPreference = 'SilentlyContinue'
 $VerbosePreference = 'SilentlyContinue'
 $ProgressPreference = 'SilentlyContinue'
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # HELPERS
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function _NV { param($A,$B) if ($null -ne $A -and $A -ne '') { $A } else { $B } }
 
 function New-GShieldRunspace {
@@ -129,9 +129,9 @@ function New-GShieldRunspace {
     [runspacefactory]::CreateRunspace($iss)
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 1: CONFIGURATION (ALL OPTIONS ENABLED)
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 $Script:EDRConfig = @{
     InstallDir          = $Script:InstallDir
     LogPath             = "$Script:InstallDir\Logs"
@@ -190,9 +190,9 @@ $Script:ResponseConfig = @{
     AutoResponseEnabled=$true  # AUTOMATIC RESPONSE ENABLED
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 2: GLOBAL STATE
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 $Script:ProcessTracker    = @{}
 $Script:AlertHistory      = [System.Collections.ArrayList]::new()
 $Script:ActiveWatchers    = [System.Collections.ArrayList]::new()
@@ -206,9 +206,9 @@ $Script:RetaliatedConns   = @{}
 $Script:BrowserConns      = @{}
 $Script:AllowedIPs        = @()
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 3: EMBEDDED RULES & DATA (SAME AS ORIGINAL)
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 $Script:CustomRules = @(
     @{ Name='CobaltStrike';  Desc='Cobalt Strike beacon';       Cat='C2';            Sev='Critical'; Score=90;  Patterns=@('beacon\.dll','cobaltstrike','sleeptime','%COMSPEC%','IEX.*downloadstring.*http'); Cond='any' }
     @{ Name='PowerSploit';   Desc='PowerSploit framework';      Cat='Execution';     Sev='High';     Score=75;  Patterns=@('invoke-shellcode','invoke-reflectivepeinjection','invoke-dllinjection','invoke-tokenmanipulation','get-gpppassword','invoke-kerberoast'); Cond='any' }
@@ -329,9 +329,9 @@ $Script:RansomwareExtensions = @('.encrypted','.locked','.crypt','.crypto','.enc
 $Script:RansomNotePatterns = @('readme','recover','restore','decrypt','how to',
     'help_decrypt','help_recover','ransom','payment','_readme','!readme')
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 4: LOGGING (Minimal - only critical)
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function Write-EDRLog {
     param([string]$Message, [ValidateSet('INFO','WARN','ALERT','CRITICAL','DEBUG')][string]$Level = 'INFO')
     $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'
@@ -345,9 +345,9 @@ function Write-EDRLog {
     }
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 5: SELF-PROTECTION & INTEGRITY
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function Test-IsExcludedPath {
     param([string]$Path)
     if (-not $Path) { return $false }
@@ -388,9 +388,9 @@ function Test-SelfIntegrity {
     return $true
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 6: WHITELIST & HASH REPUTATION
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function Initialize-Whitelist {
     $wlPath = $Script:EDRConfig.WhitelistPath
     if (Test-Path $wlPath) {
@@ -443,9 +443,9 @@ function Get-HashReputation {
     return $result
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 7: P/INVOKE TYPES (Memory Scanner)
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 $Script:PInvokeLoaded = $false
 function Initialize-PInvoke {
     if ($Script:PInvokeLoaded) { return }
@@ -505,7 +505,7 @@ public class EDRNative {
     } catch { }
 }
 
-# ── AMSI Scanner ───────────────────────────────────────────────
+# -- AMSI Scanner -----------------------------------------------
 $Script:AMSIAvailable = $false
 $Script:AMSIContext = [IntPtr]::Zero
 
@@ -567,9 +567,9 @@ function Invoke-AMSIFileScan {
     } catch { return 0 }
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 8: STATIC ANALYSIS
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function Invoke-StaticAnalysis {
     param([string]$FilePath)
     $r = [PSCustomObject]@{
@@ -624,9 +624,9 @@ function Invoke-StaticAnalysis {
     return $r
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 9: BEHAVIOR ENGINE
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function Invoke-BehaviorAnalysis {
     param([int]$ProcessId, [string]$CommandLine, [string]$FilePath)
     $r = [PSCustomObject]@{
@@ -686,9 +686,9 @@ function Invoke-BehaviorAnalysis {
     return $r
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 10: YARA, MITRE, NETWORK, CHAIN, MEMORY, RANSOMWARE
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function Initialize-YaraEngine { }
 
 function Invoke-YaraRuleScan {
@@ -775,7 +775,7 @@ function Invoke-NetworkAnalysis {
 
 function Start-NetworkMonitor { }
 
-# ── VPN Gate Auto-Connect ──────────────────────────────────────
+# -- VPN Gate Auto-Connect --------------------------------------
 function Invoke-VpnGateL2tpNatFix {
     try {
         $p = 'HKLM:\SYSTEM\CurrentControlSet\Services\PolicyAgent'
@@ -789,7 +789,7 @@ function Start-VpnGateSmartClient {
     Invoke-VpnGateL2tpNatFix
     if (-not (Test-Path $Script:VpnGateWorkDir)) { New-Item -Path $Script:VpnGateWorkDir -ItemType Directory -Force | Out-Null }
 
-    # ── Pre-flight: probe which VPN transports are actually available ──
+    # -- Pre-flight: probe which VPN transports are actually available --
     $hasL2tp = $false
     $hasSstp = $false
     $hasOpenVpn = $false
@@ -832,7 +832,7 @@ function Start-VpnGateSmartClient {
     # If nothing is available, disable VPN for this run
     if (-not $hasL2tp -and -not $hasOpenVpn -and -not $hasSstp) {
         $Script:NoVpnGate = $true
-        Write-EDRLog 'VPNGate: NO transport available (L2TP/SSTP/OpenVPN all missing) — VPN DISABLED for this run' 'CRITICAL'
+        Write-EDRLog 'VPNGate: NO transport available (L2TP/SSTP/OpenVPN all missing) - VPN DISABLED for this run' 'CRITICAL'
         return
     }
 
@@ -867,7 +867,7 @@ function Start-VpnGateSmartClient {
         $ProgressPreference = 'SilentlyContinue'
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-        # ── Consecutive-failure tracking for auto-disable ──
+        # -- Consecutive-failure tracking for auto-disable --
         $consecutiveFails = 0
         $maxConsecutiveFails = 8   # after this many full-server failures, disable VPN for this run
 
@@ -962,7 +962,7 @@ function Start-VpnGateSmartClient {
             return $false
         }
 
-        # ── Transport 1: L2TP (only attempted if pre-flight confirmed available) ──
+        # -- Transport 1: L2TP (only attempted if pre-flight confirmed available) --
         function Connect-VgL2tp {
             param($S)
             if (-not $VG_HasL2tp) { return $false }
@@ -987,7 +987,7 @@ function Start-VpnGateSmartClient {
             return $false
         }
 
-        # ── Transport 2: OpenVPN (only attempted if binary found) ──
+        # -- Transport 2: OpenVPN (only attempted if binary found) --
         function Connect-VgOpenVpn {
             param($S)
             if (-not $VG_HasOpenVpn -or -not $VG_OvpnExe) { return $false }
@@ -1016,7 +1016,7 @@ function Start-VpnGateSmartClient {
             return $false
         }
 
-        # ── Transport 3: SSTP (built-in Windows, works when L2TP COM is missing) ──
+        # -- Transport 3: SSTP (built-in Windows, works when L2TP COM is missing) --
         function Connect-VgSstp {
             param($S)
             if (-not $VG_HasSstp) { return $false }
@@ -1050,7 +1050,7 @@ function Start-VpnGateSmartClient {
             return $false
         }
 
-        # ── Build transport summary for log ──
+        # -- Build transport summary for log --
         $transports = @()
         if ($VG_HasL2tp)    { $transports += 'L2TP' }
         if ($VG_HasOpenVpn) { $transports += 'OpenVPN' }
@@ -1085,7 +1085,7 @@ function Start-VpnGateSmartClient {
                         $idx++
                         # Auto-disable after too many consecutive failures
                         if ($consecutiveFails -ge $maxConsecutiveFails) {
-                            Write-VgLog "DISABLED: $consecutiveFails consecutive failures — VPN disabled for this run" 'CRITICAL'
+                            Write-VgLog "DISABLED: $consecutiveFails consecutive failures - VPN disabled for this run" 'CRITICAL'
                             return  # exits the runspace script, stops the loop
                         }
                         Start-Sleep -Seconds 8
@@ -1120,7 +1120,7 @@ function Start-VpnGateSmartClient {
     Write-EDRLog 'VPN Gate auto-connect started (background runspace)' 'INFO'
 }
 
-# ── Process Chain ──────────────────────────────────────────────
+# -- Process Chain ----------------------------------------------
 function Get-ProcessChain {
     param([int]$ProcessId)
     $chain = [System.Collections.ArrayList]::new(); $cur=$ProcessId; $visited=@{}
@@ -1169,7 +1169,7 @@ function Invoke-ChainAnalysis {
     return $r
 }
 
-# ── Memory Scanner ─────────────────────────────────────────────
+# -- Memory Scanner ---------------------------------------------
 $Script:ShellcodeSigs = @(
     @(0xFC,0x48,0x83,0xE4,0xF0),
     @(0xFC,0xE8,0x82,0x00,0x00,0x00),
@@ -1250,7 +1250,7 @@ function Invoke-MemoryScan {
     return $r
 }
 
-# ── Ransomware Detector ────────────────────────────────────────
+# -- Ransomware Detector ----------------------------------------
 function Invoke-RansomwareCheck {
     param([string]$EventType, [string]$OldPath, [string]$NewPath)
     $score = 0
@@ -1286,9 +1286,9 @@ function Invoke-RansomwareCheck {
     return $score
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 11: SCORING ENGINE
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 $Script:ScoreWeights = @{ Static=1.0; Behavior=1.5; Yara=1.3; Mitre=0.8; Network=1.2; Chain=1.4; Memory=1.5; HashRep=1.0 }
 
 function Get-ThreatScore {
@@ -1350,9 +1350,9 @@ function Get-ThreatScore {
     return $bd
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 12: RESPONSE ENGINE (FULLY AUTOMATIC)
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function Invoke-ThreatResponse {
     param($A, [int]$Score, [string]$Verdict)
     $actions = [System.Collections.ArrayList]::new()
@@ -1408,11 +1408,11 @@ function Invoke-ThreatResponse {
     if ($actions.Count -eq 0) { return 'None' }; return ($actions -join '; ')
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 13: GSHIELD MODULES
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 
-# ── Key Scrambler ──────────────────────────────────────────────
+# -- Key Scrambler ----------------------------------------------
 function Start-KeyScrambler {
     try {
         if (-not ([System.Management.Automation.PSTypeName]'KeyScrambler').Type) {
@@ -1466,7 +1466,7 @@ public class KeyScrambler {
     } catch { Write-EDRLog "KeyScrambler failed: $_" 'WARN' }
 }
 
-# ── UAC Enforcement ────────────────────────────────────────────
+# -- UAC Enforcement --------------------------------------------
 function Invoke-UACEnforce {
     try {
         $raw = (Get-ItemProperty -Path $Script:UACPolicyKey -Name 'ConsentPromptBehaviorAdmin' -ErrorAction SilentlyContinue).ConsentPromptBehaviorAdmin
@@ -1478,7 +1478,7 @@ function Invoke-UACEnforce {
     } catch { }
 }
 
-# ── Retaliate Monitor ─────────────────────────────────────────
+# -- Retaliate Monitor -----------------------------------------
 function Test-IsActiveBrowsing {
     param([string]$RemoteAddress, [string]$ProcessName, [int]$RemotePort)
     if ($Script:BrowserNames -notcontains $ProcessName.ToLower()) { return $false }
@@ -1538,7 +1538,7 @@ function Invoke-RetaliateMonitorCycle {
     $stale | ForEach-Object { $Script:BrowserConns.Remove($_) }
 }
 
-# ── Password Rotator ───────────────────────────────────────────
+# -- Password Rotator -------------------------------------------
 $Script:PwRotatorWorkerScript = @'
 param([string]$Mode, [string]$Username)
 $ErrorActionPreference = 'Continue'
@@ -1706,9 +1706,9 @@ function Install-PasswordRotator {
     Write-EDRLog "PasswordRotator installed for user: $currentUser" 'INFO'
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 14: CORE ORCHESTRATOR
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function Invoke-FullAnalysis {
     param([string]$FilePath, [int]$ProcessId, [string]$CommandLine)
     if (Test-IsSelfProcess $ProcessId) { return $null }
@@ -1748,7 +1748,7 @@ function Invoke-FullAnalysis {
     return $result
 }
 
-# ── Real-Time Monitors ─────────────────────────────────────────
+# -- Real-Time Monitors -----------------------------------------
 
 # Shared action block for process-start events (used by all monitor fallbacks)
 $Script:ProcessMonitorAction = {
@@ -1769,7 +1769,7 @@ $Script:ProcessMonitorAction = {
 function Start-ProcessMonitor {
     $monitorStarted = $false
 
-    # ── Attempt 1: WMI event subscription (preferred, real-time) ──
+    # -- Attempt 1: WMI event subscription (preferred, real-time) --
     try {
         $sub = Register-WmiEvent -Query 'SELECT * FROM Win32_ProcessStartTrace' -SourceIdentifier 'EDR_ProcessMonitor' -ErrorAction Stop -Action {
             $p = $Event.SourceEventArgs.NewEvent
@@ -1779,10 +1779,10 @@ function Start-ProcessMonitor {
         $monitorStarted = $true
         Write-EDRLog 'ProcessMonitor: started via WMI event subscription' 'INFO'
     } catch {
-        Write-EDRLog "ProcessMonitor: WMI event failed ($_) — trying CIM fallback" 'WARN'
+        Write-EDRLog "ProcessMonitor: WMI event failed ($_) - trying CIM fallback" 'WARN'
     }
 
-    # ── Attempt 2: CIM indication subscription (works on newer PS / stripped WMI) ──
+    # -- Attempt 2: CIM indication subscription (works on newer PS / stripped WMI) --
     if (-not $monitorStarted) {
         try {
             $cimSub = Register-CimIndicationEvent -Query 'SELECT * FROM Win32_ProcessStartTrace' -SourceIdentifier 'EDR_ProcessMonitor_CIM' -ErrorAction Stop -Action {
@@ -1795,11 +1795,11 @@ function Start-ProcessMonitor {
             $monitorStarted = $true
             Write-EDRLog 'ProcessMonitor: started via CIM indication event' 'INFO'
         } catch {
-            Write-EDRLog "ProcessMonitor: CIM indication failed ($_) — trying polling fallback" 'WARN'
+            Write-EDRLog "ProcessMonitor: CIM indication failed ($_) - trying polling fallback" 'WARN'
         }
     }
 
-    # ── Attempt 3: Polling timer (works on any Windows, even stripped) ──
+    # -- Attempt 3: Polling timer (works on any Windows, even stripped) --
     if (-not $monitorStarted) {
         try {
             $Script:_PollKnownPids = @{}
@@ -1841,10 +1841,10 @@ function Start-ProcessMonitor {
         }
     }
 
-    # ── All attempts exhausted — disable until next script run ──
+    # -- All attempts exhausted - disable until next script run --
     if (-not $monitorStarted) {
         $Script:EDRConfig.EnableRealTime = $false
-        Write-EDRLog 'ProcessMonitor: ALL methods unavailable — real-time process monitoring DISABLED for this run' 'CRITICAL'
+        Write-EDRLog 'ProcessMonitor: ALL methods unavailable - real-time process monitoring DISABLED for this run' 'CRITICAL'
     }
 }
 
@@ -1891,9 +1891,9 @@ function Start-IntegrityWatchdog {
     $timer.Start(); $Script:ActiveWatchers.Add($timer) | Out-Null
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # SECTION 15: START EDR (FULLY AUTOMATIC)
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 function Start-EDR {
     # Ensure directories
     foreach ($dir in @($Script:EDRConfig.LogPath, $Script:EDRConfig.QuarantinePath)) {
@@ -1924,9 +1924,9 @@ function Start-EDR {
     Write-EDRLog "Auto-response: ENABLED (Kill=$($Script:ResponseConfig.AutoKillThreshold), Quarantine=$($Script:ResponseConfig.AutoQuarantineThreshold), Block=$($Script:ResponseConfig.AutoBlockThreshold))" 'INFO'
 }
 
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 # MAIN ENTRY - AUTOMATIC START
-# ═══════════════════════════════════════════════════════════════
+# ===============================================================
 
 # Suppress all console output
 $ConsoleOutput = $false

@@ -47,27 +47,27 @@ $TaskConfig = @{
 
 # ------------------------- Setup & Task Registration -------------------------
 if ((Get-ExecutionPolicy) -eq "Restricted") {
-    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force -ErrorAction SilentlyContinue
-    Log "Set execution policy to Bypass"
+    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force -ErrorAction SilentlyContinue
+    Log "Set execution policy to Bypass"
 }
 if ($isAdmin) {
-    if (-not (Test-Path $scriptDir)) {
-        New-Item -Path $scriptDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
-    }
-    if (-not (Test-Path $scriptPath) -or (Get-Item $scriptPath -ErrorAction SilentlyContinue).LastWriteTime -lt (Get-Item $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue).LastWriteTime) {
-        Copy-Item -Path $MyInvocation.MyCommand.Path -Destination $scriptPath -Force -ErrorAction SilentlyContinue
-        Log "Updated script to: $scriptPath"
-    }
-   
-    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-    if (-not $existingTask) {
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$scriptPath""
-        $trigger = New-ScheduledTaskTrigger -AtLogOn
-        $principal = New-ScheduledTaskPrincipal -UserId "" -LogonType ServiceAccount -RunLevel Highest
-        $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Description $taskDescription
-        Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction SilentlyContinue
-        Log "Scheduled task registered"
-    }
+    if (-not (Test-Path $scriptDir)) {
+        New-Item -Path $scriptDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+    }
+    if (-not (Test-Path $scriptPath) -or (Get-Item $scriptPath -ErrorAction SilentlyContinue).LastWriteTime -lt (Get-Item $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue).LastWriteTime) {
+        Copy-Item -Path $MyInvocation.MyCommand.Path -Destination $scriptPath -Force -ErrorAction SilentlyContinue
+        Log "Updated script to: $scriptPath"
+    }
+   
+    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if (-not $existingTask) {
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$scriptPath""
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $principal = New-ScheduledTaskPrincipal -UserId "" -LogonType ServiceAccount -RunLevel Highest
+        $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Description $taskDescription
+        Register-ScheduledTask -TaskName $taskName -InputObject $task -Force -ErrorAction SilentlyContinue
+        Log "Scheduled task registered"
+    }
 }
 
 # Behavior monitoring settings
@@ -744,7 +744,7 @@ function Invoke-ThreatAnalysis {
     # Check Cymru for known-bad
     if (Test-CymruMalwareHash -SHA256 $fileHash) {
         Save-ToDatabase -Hash $fileHash -IsSafe $false
-        Move-ToQuarantine -FilePath $FilePath -Reason "Cymru MHR malware match (â‰¥$($Config.CymruDetectionThreshold)% detection)"
+        Move-ToQuarantine -FilePath $FilePath -Reason "Cymru MHR malware match ( percent$($Config.CymruDetectionThreshold)% detection)"
         return
     }
     

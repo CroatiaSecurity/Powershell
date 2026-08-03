@@ -48,7 +48,7 @@ Start-ThreadJob -Name "GShield-Monitor" -ScriptBlock {
             $sig = Get-AuthenticodeSignature -FilePath $path
             if ($sig.Status -ne 'Valid') {
                 Remove-Item -Path $path -Force -ErrorAction SilentlyContinue
-                Write-Output "⚠️ Deleted unsigned DLL: $path"
+                Write-Output "[!] Deleted unsigned DLL: $path"
             }
         } catch {}
     }

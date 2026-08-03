@@ -6,8 +6,8 @@
 # Blocks ALL inbound/outbound connections for non-whitelisted processes (exe/dll).
 # Terminates active non-whitelisted connections and kills their processes.
 # Quarantines non-whitelisted process executables to C:\Quarantine.
-# NO default whitelist—apps must gain focus to be whitelisted.
-# NO FileSystemWatcher—whitelisting happens directly on focus detection.
+# NO default whitelist-apps must gain focus to be whitelisted.
+# NO FileSystemWatcher-whitelisting happens directly on focus detection.
 # Logs to %TEMP%\GFocus.log. Auto-registers as a SYSTEM, hidden task on startup.
 # Encoding: UTF-8
 

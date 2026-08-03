@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Ultimate Windows ISO Debloater - Fully automated version
     Author: Gorstak (gorstak.eu)

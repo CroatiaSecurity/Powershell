@@ -1,4 +1,4 @@
-﻿# NetworkDebloat.ps1
+# NetworkDebloat.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Disables unnecessary network adapter bindings (File/Printer Sharing, QoS,
 #              LLTD) on all active adapters and blocks LDAP/LDAPS ports via firewall.

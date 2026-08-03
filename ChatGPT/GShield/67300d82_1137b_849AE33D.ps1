@@ -39,4 +39,4 @@ if ($PayloadB64 -notmatch '^[A-Za-z0-9+/=]') {
     [Convert]::FromBase64String($PayloadB64)
 )
 
-Write-Host "[✓] GShield payload restored to $Payload"
+Write-Host "[[OK]] GShield payload restored to $Payload"

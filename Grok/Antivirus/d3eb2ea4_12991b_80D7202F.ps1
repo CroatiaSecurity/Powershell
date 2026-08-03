@@ -238,7 +238,7 @@ function Remove-UnsignedDLLs {
                     "$($fileHash.Hash),$isValid" | Out-File -FilePath $localDatabase -Append -Encoding UTF8
 
                     if (-not $isValid) {
-                        Write-Log "UNSIGNED/INVALID DLL DETECTED: $($dll.FullName) → Quarantining"
+                        Write-Log "UNSIGNED/INVALID DLL DETECTED: $($dll.FullName) -> Quarantining"
                         if (Set-FileOwnershipAndPermissions -filePath $dll.FullName) {
                             Stop-ProcessUsingDLL -filePath $dll.FullName
                             Quarantine-File -filePath $dll.FullName
@@ -265,7 +265,7 @@ $action = {
 
             if ($using:Test-SkipFile -fullPath $fullPath) { return }
 
-            Write-Log "Watcher → New/Changed DLL: $fullPath"
+            Write-Log "Watcher -> New/Changed DLL: $fullPath"
             $fileHash = Calculate-FileHash -filePath $fullPath
             if (-not $fileHash) { return }
 

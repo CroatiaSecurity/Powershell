@@ -3,7 +3,7 @@
 # Runs continuously as SYSTEM, logging foreground apps to %TEMP%\FocusLock.log.
 # Auto-whitelists each new foreground app and its child processes for network access.
 # Blocks all other outbound connections (exe/dll) using Windows Firewall.
-# NO default whitelist—apps must gain window focus to be whitelisted.
+# NO default whitelist-apps must gain window focus to be whitelisted.
 # Logs to %TEMP%\FocusLock.log. No process killing or file quarantine.
 # To deploy: Save as .ps1, use Task Scheduler to run as SYSTEM (highest privs, hidden).
 

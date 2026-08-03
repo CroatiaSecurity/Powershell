@@ -57,7 +57,7 @@ function Register-GShieldTask {
         -Force | Out-Null
 }
 
-# EDR – continuous
+# EDR - continuous
 Register-GShieldTask `
     -Name "EDR" `
     -Script "$ModulesDir\GShield.EDR.ps1" `
@@ -75,11 +75,11 @@ Register-GShieldTask `
     -Script "$ModulesDir\GShield.Network.ps1" `
     -Trigger (New-ScheduledTaskTrigger -AtStartup)
 
-# Hardening – run once
+# Hardening - run once
 Register-GShieldTask `
     -Name "Hardening" `
     -Script "$ModulesDir\GShield.Hardening.ps1" `
     -Trigger (New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1))
 
-Write-Host "[✓] GShield installed successfully"
+Write-Host "[[OK]] GShield installed successfully"
 exit

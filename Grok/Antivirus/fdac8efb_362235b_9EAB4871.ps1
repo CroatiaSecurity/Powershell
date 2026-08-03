@@ -1976,7 +1976,7 @@ $job = Start-Job -ScriptBlock {
         foreach ($adapter in $adapters) {
             Enable-NetAdapter -Name $adapter.Name -Confirm:$false -ErrorAction SilentlyContinue
         }
-        Write-Host "🌐 Network briefly disabled"
+        Write-Host " Network briefly disabled"
     }
 
     function Add-XSSFirewallRule {
@@ -1993,10 +1993,10 @@ $job = Start-Job -ScriptBlock {
                     -Protocol TCP `
                     -Profile Any `
                     -Description "Blocked due to potential XSS in URL"
-                Write-Host "🚫 Domain blocked via firewall: $domain"
+                Write-Host " Domain blocked via firewall: $domain"
             }
         } catch {
-            Write-Warning "⚠️ Could not block: $url"
+            Write-Warning "[!] Could not block: $url"
         }
     }
 
@@ -2005,7 +2005,7 @@ $job = Start-Job -ScriptBlock {
         $cmdline = $proc.CommandLine
 
         if ($cmdline -match $pattern) {
-            Write-Host "`n❌ Potential XSS detected in: $cmdline"
+            Write-Host "`n[X] Potential XSS detected in: $cmdline"
 
             if ($cmdline -match 'https?://[^\s"]+') {
                 $url = $matches[0]
@@ -8629,7 +8629,7 @@ $BrowserProcesses = @(
     'bravesoftware', 'browsex', 'browsec', 'comet', 'elements', 'flashpeak', 'surf'
 )
 
-# Gaming (and all non-browser apps) are never monitored or blocked â€” explicitly unhindered.
+# Gaming (and all non-browser apps) are never monitored or blocked " explicitly unhindered.
 $GamingProcesses = @(
     'steam', 'steamwebhelper', 'epicgameslauncher', 'origin', 'battle.net', 'eadesktop', 'ea app',
     'ubisoft game launcher', 'gog galaxy', 'rungame', 'gamebar', 'gameservices', 'overwolf'

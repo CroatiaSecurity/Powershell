@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Baseline-Guard.ps1 — embed safe baseline, detect changes (firewall, services, autoruns, ASR, Defender), quarantine suspicious files, optionally restore.
+  Baseline-Guard.ps1 - embed safe baseline, detect changes (firewall, services, autoruns, ASR, Defender), quarantine suspicious files, optionally restore.
 .DESCRIPTION
   - Embeds a baseline database (hashtables/lists) inside script.
   - Produces an HTML/text report and backups of modified settings.
@@ -206,7 +206,7 @@ function Enforce-WindowsDefender {
             Log-Write "Failed to set Defender prefs: $_"
         }
     } else {
-        Log-Write "AutoFix not set — skipping changes to Defender prefs."
+        Log-Write "AutoFix not set - skipping changes to Defender prefs."
     }
 }
 
@@ -245,13 +245,13 @@ function Enforce-ASR {
             try {
                 # This mapping depends on installed PowerShell module and Windows build.
                 # Use PowerShell cmdlets or registry edits as agent of last resort.
-                Log-Write "Would set ASR rule $k to $($Baseline.ASR[$k]) — implementation may vary by OS."
+                Log-Write "Would set ASR rule $k to $($Baseline.ASR[$k]) - implementation may vary by OS."
             } catch {
                 Log-Write "Failed set ASR $k : $_"
             }
         }
     } else {
-        Log-Write "AutoFix not set — skipping ASR modifications."
+        Log-Write "AutoFix not set - skipping ASR modifications."
     }
 }
 
@@ -302,7 +302,7 @@ function Enforce-Firewall {
             }
         }
     } else {
-        Log-Write "AutoFix not set — skipping firewall modifications. Backup at $backup"
+        Log-Write "AutoFix not set - skipping firewall modifications. Backup at $backup"
     }
 }
 
@@ -495,7 +495,7 @@ function Enforce-ScheduledTasks {
             }
         }
     } else {
-        Log-Write "AutoFix not set — suspicious scheduled tasks will not be changed."
+        Log-Write "AutoFix not set - suspicious scheduled tasks will not be changed."
     }
 }
 
@@ -564,7 +564,7 @@ if ($AutoFix -and $report.SuspiciousFiles) {
         Quarantine-File -Path $s.File -Reason "Unsigned or outside trusted paths"
     }
 } else {
-    Log-Write "AutoFix not set or no suspicious files — no quarantining performed."
+    Log-Write "AutoFix not set or no suspicious files - no quarantining performed."
 }
 
 # Optionally start Defender scan

@@ -98,7 +98,7 @@ public class KeyScrambler
                                    GetModuleHandle(null), 0);
         if (_hookID == IntPtr.Zero) throw new Exception("Hook failed: " + Marshal.GetLastWin32Error());
 
-        Console.WriteLine("Scrambler ON – you type normally, loggers see random A-Z sequences with varied patterns.");
+        Console.WriteLine("Scrambler ON - you type normally, loggers see random A-Z sequences with varied patterns.");
         Console.WriteLine("Close window or Ctrl+C to stop.");
 
         MSG msg;

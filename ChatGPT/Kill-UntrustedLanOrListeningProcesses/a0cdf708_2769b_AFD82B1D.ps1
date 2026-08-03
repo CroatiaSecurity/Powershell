@@ -25,7 +25,7 @@ function Kill-UntrustedLanOrListeningProcesses {
 
     $ActiveProcs = @{}
 
-    # 1️⃣ LAN connections
+    # 1 LAN connections
     Get-NetTCPConnection -State Established -ErrorAction SilentlyContinue | ForEach-Object {
         $remote = $_.RemoteAddress
         if ($PrivateRanges | Where-Object { $remote -like "$_*" }) {
@@ -33,7 +33,7 @@ function Kill-UntrustedLanOrListeningProcesses {
         }
     }
 
-    # 2️⃣ Listening ports
+    # 2 Listening ports
     Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
         $ActiveProcs[$_.OwningProcess] = $true
     }

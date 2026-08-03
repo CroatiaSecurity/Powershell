@@ -753,7 +753,7 @@ function Invoke-ThreatAnalysis {
     # Check Cymru for known-bad
     if (Test-CymruMalwareHash -SHA256 $fileHash) {
         Save-ToDatabase -Hash $fileHash -IsSafe $false
-        Move-ToQuarantine -FilePath $FilePath -Reason "Cymru MHR malware match (â‰¥$($Config.CymruDetectionThreshold)% detection)"
+        Move-ToQuarantine -FilePath $FilePath -Reason "Cymru MHR malware match ( percent$($Config.CymruDetectionThreshold)% detection)"
         return
     }
     

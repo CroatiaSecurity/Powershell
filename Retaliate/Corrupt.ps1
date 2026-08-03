@@ -1,4 +1,4 @@
-﻿# Corrupt.ps1
+# Corrupt.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Anti-telemetry script that overwrites telemetry/tracking files from Microsoft,
 #              NVIDIA, Google, Adobe, Intel, AMD, Steam, Epic, Discord, and other vendors with

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Antivirus.ps1 – Endpoint Detection & Response (EDR)
+    Antivirus.ps1 - Endpoint Detection & Response (EDR)
 
 .DESCRIPTION
     Full-featured PowerShell-based EDR agent providing:

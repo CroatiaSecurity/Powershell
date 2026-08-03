@@ -140,7 +140,7 @@ function Show-ResultsWindow {
     $button.Size = '100,30'
     $button.Location = New-Object Drawing.Point (($form.ClientSize.Width - 110), 10)
     $button.Anchor = "Top,Right"
-    $button.Text = "📷 Screenshot"
+    $button.Text = " Screenshot"
     $button.Add_Click({ Take-Screenshot -form $form })
     $form.Controls.Add($button)
 

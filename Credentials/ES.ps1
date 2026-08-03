@@ -1,4 +1,4 @@
-﻿# ES.ps1
+# ES.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: Session security monitor that lists and terminates non-console RDP/remote
 #              sessions every 5 seconds to prevent unauthorized remote access. Installs

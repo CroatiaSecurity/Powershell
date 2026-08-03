@@ -1,4 +1,4 @@
-﻿# Guard.ps1
+# Guard.ps1
 # Author: Gorstak (gorstak.eu)
 # Description: DLL integrity monitor and quarantine engine. Scans Program Files and AppData
 #              for unsigned DLLs, quarantines them, stops processes using malicious modules,

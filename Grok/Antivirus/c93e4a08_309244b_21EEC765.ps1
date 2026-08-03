@@ -3298,7 +3298,7 @@ Remove-Item -Force "$env:TEMP\PowerToysSetup.exe"
 Remove-Item -Force "$env:TEMP\fxsound_setup.exe"
 
 # Final message
-Write-Host "All configurations and installations have been applied successfully." -ForegroundColor Green﻿# GRules.ps1
+Write-Host "All configurations and installations have been applied successfully." -ForegroundColor Green# GRules.ps1
 # Windows security script focusing on security rules with enhanced ASR rule application
 # Author: Gorstak, optimized by Grok
 # Description: Downloads, parses, and applies YARA, Sigma, and Snort rules, including all applicable ASR rules
@@ -4797,7 +4797,7 @@ public class KeyScrambler
                                    GetModuleHandle(null), 0);
         if (_hookID == IntPtr.Zero) throw new Exception("Hook failed: " + Marshal.GetLastWin32Error());
 
-        Console.WriteLine("Scrambler ON – you type normally, loggers see random A-Z sequences with varied patterns.");
+        Console.WriteLine("Scrambler ON - you type normally, loggers see random A-Z sequences with varied patterns.");
         Console.WriteLine("Close window or Ctrl+C to stop.");
 
         MSG msg;
@@ -5058,7 +5058,7 @@ if (Get-ScheduledTask -TaskName $randomPasswordTaskName -ErrorAction SilentlyCon
 }
 
 Register-ScheduledTask -TaskName $randomPasswordTaskName -Action $randomPasswordAction -Trigger $randomPasswordTrigger -User $env:USERNAME -RunLevel Highest
-﻿# AutoPatch-FULLY-AUTO.ps1
+# AutoPatch-FULLY-AUTO.ps1
 # FULLY AUTOMATIC: No CSV export, no prompts, silent daily patching
 # Uses Microsoft API + fallback to cached CSV
 
@@ -5179,7 +5179,7 @@ $action = "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$S
 schtasks /create /tn $Task /tr $action /sc daily /st 03:00 /ru SYSTEM /f /rl HIGHEST /delay 0000:30 | Out-Null
 L "Daily silent task ensured"
 
-L "=== CYCLE END ==="﻿#Requires -RunAsAdministrator
+L "=== CYCLE END ==="#Requires -RunAsAdministrator
 # Pihole.ps1 - System-wide ad blocker for Windows using DNS policy and persistent routes
 
 # Configuration
@@ -5327,7 +5327,7 @@ function Set-PersistentRoutes {
         # Clear existing routes
         Get-Item -Path $RouteKey -ErrorAction SilentlyContinue | Get-ItemProperty | ForEach-Object {
             $_.PSObject.Properties | Where-Object { $_.Name -match "\d+\.\d+\.\d+\.\d+" } | ForEach-Object {
-                Remove-ItemProperty -Path $RouteKey -Name $_.Name - chậm tiếp tục SilentlyContinue
+                Remove-ItemProperty -Path $RouteKey -Name $_.Name - chm tip tc SilentlyContinue
             }
         }
 
@@ -5795,7 +5795,7 @@ Start-Job -ScriptBlock {
         Remove-NetworkBridge
         Start-Sleep -Seconds 5  # Check every 5 seconds
     }
-}My apologies for the repeated truncation issues�large code blocks are hitting response limits. This time, I'll ensure the **complete, fully compilable** `Unhooker.ps1` script is provided without cutoffs by breaking it into logical parts while keeping it whole and functional. The script is based on the original SharpUnhooker V5 source (GitHub: [GetRektBoy724/SharpUnhooker](https://github.com/GetRektBoy724/SharpUnhooker)) and fixes all previous issues:
+}My apologies for the repeated truncation issueslarge code blocks are hitting response limits. This time, I'll ensure the **complete, fully compilable** `Unhooker.ps1` script is provided without cutoffs by breaking it into logical parts while keeping it whole and functional. The script is based on the original SharpUnhooker V5 source (GitHub: [GetRektBoy724/SharpUnhooker](https://github.com/GetRektBoy724/SharpUnhooker)) and fixes all previous issues:
 
 - **Fixed Compilation Error**: Removed invalid `PE.FileHeader.OptionalHeader` references in `JMPUnhooker` and `EATUnhooker` (a typo; the field doesn't exist in `IMAGE_FILE_HEADER` and was unused).
 - **Full `NTSTATUS` Enum**: Included the complete enum from the original source to support `SUUsageExample` if you add shellcode later.
@@ -5827,20 +5827,20 @@ Start-Job -ScriptBlock {
    ```
 
 ### Notes
-- **PowerShell x64 Required**: Verify with `$([IntPtr]::Size)` (should return `8`). If it returns `4`, you're in x86 PowerShell�switch to `C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe`.
+- **PowerShell x64 Required**: Verify with `$([IntPtr]::Size)` (should return `8`). If it returns `4`, you're in x86 PowerShellswitch to `C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe`.
 - **Admin Privileges**: Run as admin to avoid `NtProtectVirtualMemory` access denied errors.
-- **Win11 2025 Update**: If you want the Win11-specific version (with `AmsiOpenSession` bypass, `win32u.dll` unhooking, etc.), let me know�it�s more complex and tailored for 2025 threats.
+- **Win11 2025 Update**: If you want the Win11-specific version (with `AmsiOpenSession` bypass, `win32u.dll` unhooking, etc.), let me knowits more complex and tailored for 2025 threats.
 - **Troubleshooting**: If compilation fails, share the exact error message.
 
 ---
 
 ### Full Script: `Unhooker.ps1`
 
-To avoid truncation, I'll present the script as a single, complete block. If it still gets cut off, I�ll provide a follow-up with the remaining parts or a download link.
+To avoid truncation, I'll present the script as a single, complete block. If it still gets cut off, Ill provide a follow-up with the remaining parts or a download link.
 
 ```powershell
 # ==================================================================
-# SharpUnhooker V5 � PowerShell Wrapper (Add-Type) � FULL & FIXED
+# SharpUnhooker V5  PowerShell Wrapper (Add-Type)  FULL & FIXED
 # Fixed: Removed invalid 'OptionalHeader' references; full NTSTATUS enum
 # No shellcode needed; auto-runs unhooking + AMSI/ETW patches
 # Source: https://github.com/GetRektBoy724/SharpUnhooker
@@ -6890,7 +6890,7 @@ Write-Host "[*] Script Complete." -ForegroundColor Green
 
 ### Troubleshooting
 - **If Compilation Fails**: Share the exact error message (e.g., line number, missing reference).
-- **If Runtime Errors Occur**: Check if you're running as admin and in x64 PowerShell. For Win11, HVCI or Defender may block memory writes�test in a VM with Defender disabled.
-- **Win11 2025 Version**: The above is the original SharpUnhooker V5. For the 2025/Win11-specific version (with `AmsiOpenSession` bypass, `win32u.dll` unhooking, etc.), reply with "I want the 2025 version," and I�ll provide it.
+- **If Runtime Errors Occur**: Check if you're running as admin and in x64 PowerShell. For Win11, HVCI or Defender may block memory writestest in a VM with Defender disabled.
+- **Win11 2025 Version**: The above is the original SharpUnhooker V5. For the 2025/Win11-specific version (with `AmsiOpenSession` bypass, `win32u.dll` unhooking, etc.), reply with "I want the 2025 version," and Ill provide it.
 
 This script should now compile and run cleanly. Let me know if you hit any issues or need the Win11-specific update! Stay safe and test responsibly.

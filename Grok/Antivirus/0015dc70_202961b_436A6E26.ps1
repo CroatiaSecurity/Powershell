@@ -3067,7 +3067,7 @@ Start-Job -ScriptBlock {
             } catch {}
             
             if ($hit) {
-                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | PS MEMORY HIT â†’ $($proc.Name) ($($proc.Id))" | Out-File $log -Append
+                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | PS MEMORY HIT +' $($proc.Name) ($($proc.Id))" | Out-File $log -Append
                 Write-SecurityEvent -EventType "MemoryScanHit" -Details @{ ProcessName = $proc.Name; PID = $proc.Id; Reason = "Suspicious strings in memory" } -Severity "High"
                 
                 if ($proc.Path) {
@@ -3126,7 +3126,7 @@ Start-Job -ScriptBlock {
             } catch {}
             
             if ($sus) {
-                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | REFLECTIVE PAYLOAD â†’ $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
+                "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | REFLECTIVE PAYLOAD +' $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
                 Write-SecurityEvent -EventType "ReflectivePayloadDetected" -Details @{ ProcessName = $p.Name; PID = $p.Id; Path = $p.Path } -Severity "Critical"
                 
                 if ($p.Path) {

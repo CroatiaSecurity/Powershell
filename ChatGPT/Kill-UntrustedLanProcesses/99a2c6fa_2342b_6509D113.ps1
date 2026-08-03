@@ -65,7 +65,7 @@ function Kill-UntrustedLanProcesses {
                 Stop-Process -Id $PID -Force -ErrorAction SilentlyContinue
             }
         } catch {
-            Write-Host "[!] Failed to process PID $PID — $_" -ForegroundColor DarkYellow
+            Write-Host "[!] Failed to process PID $PID - $_" -ForegroundColor DarkYellow
         }
     }
 

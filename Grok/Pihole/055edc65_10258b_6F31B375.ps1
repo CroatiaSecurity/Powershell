@@ -147,7 +147,7 @@ function Set-PersistentRoutes {
         # Clear existing routes
         Get-Item -Path $RouteKey -ErrorAction SilentlyContinue | Get-ItemProperty | ForEach-Object {
             $_.PSObject.Properties | Where-Object { $_.Name -match "\d+\.\d+\.\d+\.\d+" } | ForEach-Object {
-                Remove-ItemProperty -Path $RouteKey -Name $_.Name - chậm tiếp tục SilentlyContinue
+                Remove-ItemProperty -Path $RouteKey -Name $_.Name - chm tip tc SilentlyContinue
             }
         }
 

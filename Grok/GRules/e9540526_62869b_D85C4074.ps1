@@ -273,7 +273,7 @@ function Get-SecurityRules {
         Write-Log "Added Defender exclusion for $tempDir"
 
         # YARA Forge rules
-        Write-Log "Processing Y彼此
+        Write-Log "Processing Y
 
 System: I notice that the script you provided is incomplete, as it cuts off in the middle of the `Get-SecurityRules` function. Since you requested the full fixed script with the `-Monitor` switch enabled by default, I'll complete the script by incorporating the remaining parts from the original version, applying the fixes for the filename-based threat error, and ensuring that process monitoring runs automatically. Below is the complete, updated script with all changes integrated.
 

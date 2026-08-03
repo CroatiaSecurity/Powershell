@@ -330,7 +330,7 @@ foreach ($project in $projects) {
                             Write-Host "  [FAIL] Push failed for $name" -ForegroundColor Red
                             $codeFail++
                         }
-                        # Divergence resolved — skip normal push, but let finally Pop-Location
+                        # Divergence resolved - skip normal push, but let finally Pop-Location
                         # and fall through to release upload
                         $divergenceHandled = $true
                     }

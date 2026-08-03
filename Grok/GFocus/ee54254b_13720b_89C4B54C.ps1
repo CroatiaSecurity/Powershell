@@ -5,8 +5,8 @@
 # Whitelists processes gaining window focus, stored in %TEMP%\GFocusWhitelist.txt, reloaded on restart.
 # Blocks ALL inbound/outbound connections for non-whitelisted processes (exe/dll).
 # Terminates active non-whitelisted connections, kills processes, and quarantines executables to C:\Quarantine.
-# NO default whitelist—focus determines whitelist, persists across reboots.
-# NO FileSystemWatcher—whitelisting happens directly on focus detection.
+# NO default whitelist-focus determines whitelist, persists across reboots.
+# NO FileSystemWatcher-whitelisting happens directly on focus detection.
 # Logs to %TEMP%\GFocus.log. Auto-registers as a SYSTEM, hidden task on startup.
 # Encoding: UTF-8
 

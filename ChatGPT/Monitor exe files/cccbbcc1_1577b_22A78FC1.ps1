@@ -36,7 +36,7 @@ try {
 
         Register-ObjectEvent $watcher Renamed -Action {
             param($sender, $eventArgs)
-            Write-Log "EXE renamed: $($eventArgs.OldFullPath) → $($eventArgs.FullPath)"
+            Write-Log "EXE renamed: $($eventArgs.OldFullPath) -> $($eventArgs.FullPath)"
         }
 
         Register-ObjectEvent $watcher Deleted -Action {

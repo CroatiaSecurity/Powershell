@@ -7,4 +7,4 @@ $new = [regex]::Replace($content, '(\$)([A-Za-z_][A-Za-z0-9_]*)\:', {
     return '$(' + $m.Groups[2].Value + '):'
 })
 Set-Content -Path $path -Value $new -Force
-Write-Host "Fixed $path — replaced $Var: -> $($Var): occurrences."
+Write-Host "Fixed $path - replaced $Var: -> $($Var): occurrences."

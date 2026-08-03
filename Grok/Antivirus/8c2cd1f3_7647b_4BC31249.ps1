@@ -1,4 +1,4 @@
-# Antivirus.ps1 – 2025 Hardened Edition
+# Antivirus.ps1 - 2025 Hardened Edition
 # Original author: Gorstak | Hardening & stability fixes: community 2025
 
 $Base       = "C:\ProgramData\Antivirus"
@@ -7,16 +7,16 @@ $Backup     = Join-Path $Base "Backup"
 $LogFile    = Join-Path $Base "antivirus.log"
 $BlockedLog = Join-Path $Base "blocked.log"
 
-# Allowed system accounts (expanded – these never get touched)
+# Allowed system accounts (expanded - these never get touched)
 $AllowedSIDs = @(
     'S-1-5-18', # LOCAL SYSTEM
     'S-1-5-19', # LOCAL SERVICE
     'S-1-5-20', # NETWORK SERVICE
     'S-1-3-0',  # Creator Owner
-    'S-1-5-32-544' # Administrators (optional – remove if you want to block even admin drops)
+    'S-1-5-32-544' # Administrators (optional - remove if you want to block even admin drops)
 )
 
-# Never kill these processes – expanded list for 2025
+# Never kill these processes - expanded list for 2025
 $ProtectedProcessNames = @(
     'System','smss','csrss','wininit','winlogon','services','lsass','svchost','explorer',
     'dwm','sihost','SearchIndexer','SearchUI','ShellExperienceHost','RuntimeBroker',
@@ -36,7 +36,7 @@ function Log($msg) {
 function Deny-Execution($file,$pid,$type) {
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     "$ts | BLOCKED $type | $file | PID $pid" | Out-File $BlockedLog -Append -Encoding ASCII
-    Log "BLOCKED $type → $file (PID $pid)"
+    Log "BLOCKED $type -> $file (PID $pid)"
 
     $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
     if ($proc -and $ProtectedNames -contains $proc.ProcessName) {
@@ -82,9 +82,9 @@ function Do-Quarantine($file,$reason) {
     try {
         Copy-Item $file $bak -Force -ErrorAction Stop
         Move-Item $file $q -Force -ErrorAction Stop
-        Log "QUARANTINED [$reason] → $q (backup: $bak)"
+        Log "QUARANTINED [$reason] -> $q (backup: $bak)"
     } catch {
-        Log "QUARANTINE FAILED [$reason] $file → $_"
+        Log "QUARANTINE FAILED [$reason] $file -> $_"
     }
 }
 
@@ -96,9 +96,9 @@ function Decide-And-Act($file) {
     $ext = [IO.Path]::GetExtension($file).ToLower()
     if ($ext -notin $MonitoredExtensions) { return }
 
-    # Fast allow → skip everything else
+    # Fast allow -> skip everything else
     if (Test-FastAllow $file) {
-        Log "ALLOWED (trusted signature/CIRCL) → $file"
+        Log "ALLOWED (trusted signature/CIRCL) -> $file"
         return
     }
 
@@ -112,7 +112,7 @@ function Decide-And-Act($file) {
         }
     }
 
-    Log "ALLOWED (no reputation hit) → $file"
+    Log "ALLOWED (no reputation hit) -> $file"
 }
 
 # ========================== REFLECTIVE / MANUAL-MAP SCANNER (2025 fix) ==========================
@@ -125,14 +125,14 @@ Start-Job -Name "ReflectiveScanner" -ScriptBlock {
             $p = $_
             $sus = $false
 
-            # Process has no path on-disk image → hollowed or reflective
+            # Process has no path on-disk image -> hollowed or reflective
             if ([string]::IsNullOrWhiteSpace($p.Path) -or $p.Path -match 'unknown') { $sus = $true }
 
-            # Has modules with empty FileName/ModuleName → manually mapped
+            # Has modules with empty FileName/ModuleName -> manually mapped
             if ($p.Modules | Where-Object { [string]::IsNullOrWhiteSpace($_.FileName)) { $sus = $true }
 
             if ($sus -and $using:ProtectedNames -notcontains $p.ProcessName) {
-                "$([DateTime]::Now) | REFLECTIVE/MANUAL-MAP → $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
+                "$([DateTime]::Now) | REFLECTIVE/MANUAL-MAP -> $($p.Name) ($($p.Id)) Path='$($p.Path)'" | Out-File $log -Append
                 Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
             }
         }
@@ -181,8 +181,8 @@ Register-WmiEvent -Query "SELECT * FROM Win32_ProcessStartTrace" -Action {
     Decide-And-Act $Path
 } | Out-Null
 
-# Main loop – periodic sweep
-Log "All detectors active – entering main loop"
+# Main loop - periodic sweep
+Log "All detectors active - entering main loop"
 while ($true) {
     Get-Process | ForEach-Object {
         try {

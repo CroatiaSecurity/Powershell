@@ -1123,7 +1123,7 @@ function Main {
     Invoke-PerformanceTweaks
     Invoke-CookieMonitoring
     Invoke-AdBlocker
-    Invoke-NetworkDebloat婆
+    Invoke-NetworkDebloat
     Invoke-FillRemoteHostDrive
     Invoke-RemoteAccessHardening
     Start-Job -ScriptBlock {

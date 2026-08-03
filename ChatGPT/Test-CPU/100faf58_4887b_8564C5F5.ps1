@@ -107,7 +107,7 @@ function Show-ResultsWindow {
     $form.Controls.Add($panel)
 
     $btn = New-Object Windows.Forms.Button
-    $btn.Text = "📷 Screenshot"
+    $btn.Text = " Screenshot"
     $btn.Size = '120,30'
     $btn.Location = New-Object Drawing.Point 500, 5
     $btn.Anchor = 'Top,Right'

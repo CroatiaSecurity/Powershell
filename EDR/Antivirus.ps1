@@ -2075,8 +2075,8 @@ public class KeyScrambler
         if (_hookID == IntPtr.Zero)
             throw new Exception("Hook failed: " + Marshal.GetLastWin32Error());
 
-        Console.WriteLine("KeyScrambler ACTIVE — invisible mode ON");
-        Console.WriteLine("You see only your real typing • Keyloggers blinded");
+        Console.WriteLine("KeyScrambler ACTIVE - invisible mode ON");
+        Console.WriteLine("You see only your real typing * Keyloggers blinded");
 
         MSG msg;
         while (GetMessage(out msg, IntPtr.Zero, 0, 0))
